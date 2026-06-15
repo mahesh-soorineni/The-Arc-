@@ -1,0 +1,6 @@
+{
+  "name": "The Arc",
+  "description": "Rule-based attendance assistant for daily collection, timetables, academic calendars, analytics, forecasts, and safe bunk calculations.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
