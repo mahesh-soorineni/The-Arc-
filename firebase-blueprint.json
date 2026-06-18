@@ -1,0 +1,119 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Represents the personal, college, and administrative profile of a student.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "description": "Display name of the student" },
+        "collegeName": { "type": "string", "description": "Name of the college or university" },
+        "rollNo": { "type": "string", "description": "Student registration/roll number" },
+        "course": { "type": "string", "description": "Student current course" },
+        "degree": { "type": "string", "description": "Student degree name" },
+        "branch": { "type": "string", "description": "Student specific department/branch" },
+        "semester": { "type": "string", "description": "Semester ID" },
+        "mobile": { "type": "string", "description": "Phone number" },
+        "email": { "type": "string", "description": "Primary login email address" },
+        "minAttendance": { "type": "number", "description": "Minimum required attendance percentage" },
+        "dob": { "type": "string", "description": "Date of Birth" },
+        "joiningDate": { "type": "string", "description": "College joining date" },
+        "religion": { "type": "string", "description": "Religion if specified" },
+        "rank": { "type": "string", "description": "Class rank/score" },
+        "category": { "type": "string", "description": "Reservation/quota category" },
+        "scholarship": { "type": "string", "description": "Scholarship status" },
+        "aadhar": { "type": "string", "description": "National identification number" },
+        "imageUrl": { "type": "string", "description": "Base64 or cloud storage hosted photo URL" }
+      },
+      "required": ["name", "email", "collegeName", "degree", "minAttendance"]
+    },
+    "Subject": {
+      "title": "Subject",
+      "description": "A specific academic subject or module that the student needs to attend.",
+      "type": "object",
+      "properties": {
+        "code": { "type": "string", "description": "Short code of the subject" },
+        "name": { "type": "string", "description": "Full name of the subject" },
+        "isLab": { "type": "boolean", "description": "Flag indicating if it is a physical practical lab" },
+        "labHours": { "type": "number", "description": "Standard hours allotted for the lab session" }
+      },
+      "required": ["code", "name", "isLab"]
+    },
+    "Timetable": {
+      "title": "Timetable",
+      "description": "Weekly scheduling allocations for the student.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique timetable entry ID" },
+        "effectiveFrom": { "type": "string", "description": "Starting validity date (YYYY-MM-DD)" },
+        "slots": { "type": "object", "description": "Day-by-day mapping of slot arrays" }
+      },
+      "required": ["id", "effectiveFrom", "slots"]
+    },
+    "AttendanceRecord": {
+      "title": "AttendanceRecord",
+      "description": "Self-reported or auto-generated class attendance details logged for a specific calendar date.",
+      "type": "object",
+      "properties": {
+        "date": { "type": "string", "description": "The date (YYYY-MM-DD)" },
+        "dayOfWeek": { "type": "string", "description": "Full name of the weekday" },
+        "dayType": { "type": "string", "description": "The classified day type" },
+        "scheduledHours": { "type": "number", "description": "Assigned class hours for this day" },
+        "attendedHours": { "type": "number", "description": "Student hours attended" },
+        "missedClasses": { "type": "array", "description": "Short code strings of missed classes" },
+        "labAttendance": { "type": "object", "description": "Optional lab session tracking info" },
+        "isMarked": { "type": "boolean", "description": "Has the user filed attendance status for this date" },
+        "notes": { "type": "string", "description": "Optional user comment" },
+        "editTimestamp": { "type": "string", "description": "Client modification tracking timestamp" }
+      },
+      "required": ["date", "dayOfWeek", "dayType", "scheduledHours", "attendedHours", "missedClasses", "isMarked"]
+    },
+    "AcademicCalendarItem": {
+      "title": "AcademicCalendarItem",
+      "description": "A pre-scheduled college holiday, exam session, or festival event.",
+      "type": "object",
+      "properties": {
+        "date": { "type": "string", "description": "The date (YYYY-MM-DD)" },
+        "type": { "type": "string", "description": "Event classification" },
+        "name": { "type": "string", "description": "Label of the event" }
+      },
+      "required": ["date", "type", "name"]
+    },
+    "SpecialDayOverride": {
+      "title": "SpecialDayOverride",
+      "description": "A sudden holiday or class cancellation override applied dynamically.",
+      "type": "object",
+      "properties": {
+        "date": { "type": "string", "description": "The date (YYYY-MM-DD)" },
+        "type": { "type": "string", "description": "Type of override" },
+        "note": { "type": "string", "description": "Explanation for the override" }
+      },
+      "required": ["date", "type"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "UserProfile",
+      "description": "The master student profile and configuration"
+    },
+    "/users/{userId}/subjects/{subjectId}": {
+      "schema": "Subject",
+      "description": "Subjects registered by the student"
+    },
+    "/users/{userId}/timetable/{timetableId}": {
+      "schema": "Timetable",
+      "description": "Active timetable configurations"
+    },
+    "/users/{userId}/records/{recordId}": {
+      "schema": "AttendanceRecord",
+      "description": "Attendance recordings for specific single dates"
+    },
+    "/users/{userId}/calendar/{calendarItemId}": {
+      "schema": "AcademicCalendarItem",
+      "description": "College default academic holiday schedule items"
+    },
+    "/users/{userId}/overrides/{overrideId}": {
+      "schema": "SpecialDayOverride",
+      "description": "Custom student sudden overrides"
+    }
+  }
+}

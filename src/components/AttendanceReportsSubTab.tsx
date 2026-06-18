@@ -37,14 +37,7 @@ export function formatRegisterDate(dateStr: string): string {
   if (!dateStr) return '';
   const parts = dateStr.split('-');
   if (parts.length !== 3) return dateStr;
-  const year = parts[0];
-  const monthInt = parseInt(parts[1], 10);
-  const dayInt = parseInt(parts[2], 10);
-  
-  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  const dd = String(dayInt).padStart(2, '0');
-  const mm = months[monthInt - 1] || 'Jan';
-  return `${dd} ${mm} ${year}`;
+  return `${parts[2]}/${parts[1]}/${parts[0]}`;
 }
 
 export default function AttendanceReportsSubTab({
@@ -58,9 +51,22 @@ export default function AttendanceReportsSubTab({
   const [reportMode, setReportMode] = useState<'monthly' | 'custom' | 'till_now'>('monthly');
   const [selectedMonth, setSelectedMonth] = useState<string>('06'); // June default
   const [selectedYear, setSelectedYear] = useState<string>('2026'); // 2026 default
-  const [fromDate, setFromDate] = useState<string>('2026-05-01');
-  const [toDate, setToDate] = useState<string>('2026-06-12');
+  const [fromDate, setFromDate] = useState<string>(() => userProfile.semesterStartDate || '2026-05-01');
+  const [toDate, setToDate] = useState<string>(() => currentDate || '2026-06-12');
   const [excludeInactive, setExcludeInactive] = useState<boolean>(false);
+
+  React.useEffect(() => {
+    if (userProfile.semesterStartDate) {
+      setFromDate(userProfile.semesterStartDate);
+    }
+  }, [userProfile.semesterStartDate]);
+
+  React.useEffect(() => {
+    if (currentDate) {
+      setToDate(currentDate);
+    }
+  }, [currentDate]);
+
   const [feedback, setFeedback] = useState<string>('');
 
   // Overrides management

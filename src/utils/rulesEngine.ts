@@ -87,13 +87,14 @@ export function isAttendanceRequired(dayType: AttendanceRecord['dayType']): bool
   return true;
 }
 
-// Get pending/unmarked working attendance days from May 1, 2026 up to simulated currentDate
+// Get pending/unmarked working attendance days from semester start date up to simulated currentDate
 export function getPendingUnmarkedDays(
   currentDate: string,
   records: AttendanceRecord[],
   timetables: Timetable[],
   academicCalendar: AcademicCalendarItem[],
-  specialOverrides: SpecialDayOverride[]
+  specialOverrides: SpecialDayOverride[],
+  semesterStartDate?: string
 ): { date: string; dayOfWeek: string; scheduledHours: number; dayType: string }[] {
   const pending: { date: string; dayOfWeek: string; scheduledHours: number; dayType: string }[] = [];
   
@@ -105,8 +106,14 @@ export function getPendingUnmarkedDays(
   const currentDay = parseInt(parts[2], 10);
   const end = new Date(currentYear, currentMonth, currentDay);
   
-  // Semester starts May 1st, 2026 in local timezone
-  const start = new Date(2026, 4, 1);
+  // Semester starts at semesterStartDate or May 1st, 2026 in local timezone
+  let start = new Date(2026, 4, 1);
+  if (semesterStartDate) {
+    const sParts = semesterStartDate.split('-');
+    if (sParts.length === 3) {
+      start = new Date(parseInt(sParts[0], 10), parseInt(sParts[1], 10) - 1, parseInt(sParts[2], 10));
+    }
+  }
   const dayOfWeekNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
   for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
@@ -338,9 +345,9 @@ export function calculateAnalytics(
   });
 
   // Calculate percentages
-  const overallPercentage = totalScheduledHours > 0 ? (totalAttendedHours / totalScheduledHours) * 100 : 100;
-  const theoryPercentage = theoryScheduled > 0 ? (theoryAttended / theoryScheduled) * 100 : 100;
-  const labPercentage = labScheduled > 0 ? (labAttended / labScheduled) * 100 : 100;
+  const overallPercentage = totalScheduledHours > 0 ? (totalAttendedHours / totalScheduledHours) * 100 : 0;
+  const theoryPercentage = theoryScheduled > 0 ? (theoryAttended / theoryScheduled) * 100 : 0;
+  const labPercentage = labScheduled > 0 ? (labAttended / labScheduled) * 100 : 0;
 
   const subjectWise: AttendanceAnalytics['subjectWise'] = {};
   Object.keys(subjMap).forEach(code => {
@@ -350,7 +357,7 @@ export function calculateAnalytics(
       name: s.name,
       attended: s.attended,
       total: s.total,
-      percent: s.total > 0 ? (s.attended / s.total) * 100 : 100,
+      percent: s.total > 0 ? (s.attended / s.total) * 100 : 0,
       isLab: s.isLab,
     };
   });
@@ -419,3 +426,26 @@ export function calculateRecoveryRequired(
   const denominator = 1 - targetCoef;
   return Math.ceil(numerator / denominator);
 }
+
+/**
+ * Format string date 'yyyy-mm-dd' to 'dd/mm/yyyy'
+ */
+export function formatDateToDDMMYYYY(dateStr: string): string {
+  if (!dateStr || !dateStr.includes('-')) return dateStr;
+  const parts = dateStr.split('-');
+  if (parts.length === 3) {
+    return `${parts[2]}/${parts[1]}/${parts[0]}`;
+  }
+  return dateStr;
+}
+
+/**
+ * Format Date object to 'dd/mm/yyyy'
+ */
+export function formatDateObjToDDMMYYYY(date: Date): string {
+  const d = String(date.getDate()).padStart(2, '0');
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const y = date.getFullYear();
+  return `${d}/${m}/${y}`;
+}
+

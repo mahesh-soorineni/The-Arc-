@@ -1,0 +1,137 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Global Safety Net (Pillar 4.1)
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Phase 3: Primitive Definitions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    // Mandatorily requiring verified email for writes (Constraint 4.CRITICAL)
+    function isVerifiedOwner(userId) {
+      return isOwner(userId) && request.auth.token.email_verified == true;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    // Entity Schema Validators (Pillar 2)
+    function isValidUserProfile(data) {
+      return data.keys().hasAll(['name', 'email', 'collegeName', 'degree', 'minAttendance'])
+        && data.name is string && data.name.size() <= 100
+        && data.email is string && data.email.size() <= 100 && data.email == request.auth.token.email
+        && data.collegeName is string && data.collegeName.size() <= 150
+        && data.degree is string && data.degree.size() <= 50
+        && data.minAttendance is number && data.minAttendance >= 0 && data.minAttendance <= 100;
+    }
+
+    function isValidSubject(data) {
+      return data.keys().hasAll(['code', 'name', 'isLab'])
+        && data.code is string && data.code.size() <= 20
+        && data.name is string && data.name.size() <= 100
+        && data.isLab is bool;
+    }
+
+    function isValidTimetable(data) {
+      return data.keys().hasAll(['id', 'effectiveFrom', 'slots'])
+        && data.id is string && data.id.size() <= 50
+        && data.effectiveFrom is string && data.effectiveFrom.size() <= 20
+        && data.slots is map;
+    }
+
+    function isValidAttendanceRecord(data) {
+      return data.keys().hasAll(['date', 'dayOfWeek', 'dayType', 'scheduledHours', 'attendedHours', 'missedClasses', 'isMarked'])
+        && data.date is string && data.date.size() <= 20
+        && data.dayOfWeek is string && data.dayOfWeek.size() <= 20
+        && data.dayType is string && data.dayType.size() <= 40
+        && data.scheduledHours is number && data.scheduledHours >= 0 && data.scheduledHours <= 24
+        && data.attendedHours is number && data.attendedHours >= 0 && data.attendedHours <= 24
+        && data.missedClasses is list && data.missedClasses.size() <= 20
+        && data.isMarked is bool;
+    }
+
+    function isValidCalendarItem(data) {
+      return data.keys().hasAll(['date', 'type', 'name'])
+        && data.date is string && data.date.size() <= 20
+        && data.type is string && data.type.size() <= 40
+        && data.name is string && data.name.size() <= 100;
+    }
+
+    function isValidSpecialDayOverride(data) {
+      return data.keys().hasAll(['date', 'type'])
+        && data.date is string && data.date.size() <= 20
+        && data.type is string && data.type.size() <= 40;
+    }
+
+    // Collection Security Matches
+    match /users/{userId} {
+      // Profile Rule Checks
+      allow get: if isOwner(userId);
+      allow list: if false; // Pillar 8: No blanket list queries
+      
+      allow create: if isVerifiedOwner(userId) && isValidUserProfile(request.resource.data);
+      allow update: if isVerifiedOwner(userId) && isValidUserProfile(request.resource.data);
+      allow delete: if isVerifiedOwner(userId);
+
+      // Embedded Subjects Collection
+      match /subjects/{subjectId} {
+        allow get: if isOwner(userId);
+        allow list: if isOwner(userId); // list enforcer
+        
+        allow create: if isVerifiedOwner(userId) && isValidId(subjectId) && isValidSubject(request.resource.data);
+        allow update: if isVerifiedOwner(userId) && isValidId(subjectId) && isValidSubject(request.resource.data);
+        allow delete: if isVerifiedOwner(userId) && isValidId(subjectId);
+      }
+
+      // Embedded Timetables Collection
+      match /timetable/{timetableId} {
+        allow get: if isOwner(userId);
+        allow list: if isOwner(userId);
+        
+        allow create: if isVerifiedOwner(userId) && isValidId(timetableId) && isValidTimetable(request.resource.data);
+        allow update: if isVerifiedOwner(userId) && isValidId(timetableId) && isValidTimetable(request.resource.data);
+        allow delete: if isVerifiedOwner(userId) && isValidId(timetableId);
+      }
+
+      // Embedded Attendance Records Collection
+      match /records/{recordId} {
+        allow get: if isOwner(userId);
+        allow list: if isOwner(userId);
+        
+        allow create: if isVerifiedOwner(userId) && isValidId(recordId) && isValidAttendanceRecord(request.resource.data);
+        allow update: if isVerifiedOwner(userId) && isValidId(recordId) && isValidAttendanceRecord(request.resource.data);
+        allow delete: if isVerifiedOwner(userId) && isValidId(recordId);
+      }
+
+      // Embedded Academic Calendars Collection
+      match /calendar/{calendarItemId} {
+        allow get: if isOwner(userId);
+        allow list: if isOwner(userId);
+        
+        allow create: if isVerifiedOwner(userId) && isValidId(calendarItemId) && isValidCalendarItem(request.resource.data);
+        allow update: if isVerifiedOwner(userId) && isValidId(calendarItemId) && isValidCalendarItem(request.resource.data);
+        allow delete: if isVerifiedOwner(userId) && isValidId(calendarItemId);
+      }
+
+      // Embedded Special Overrides Collection
+      match /overrides/{overrideId} {
+        allow get: if isOwner(userId);
+        allow list: if isOwner(userId);
+        
+        allow create: if isVerifiedOwner(userId) && isValidId(overrideId) && isValidSpecialDayOverride(request.resource.data);
+        allow update: if isVerifiedOwner(userId) && isValidId(overrideId) && isValidSpecialDayOverride(request.resource.data);
+        allow delete: if isVerifiedOwner(userId) && isValidId(overrideId);
+      }
+    }
+  }
+}

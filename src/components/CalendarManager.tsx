@@ -29,7 +29,8 @@ import {
 import {
   determineDayType,
   getDayOfWeekFromDate,
-  getTimetableForDate
+  getTimetableForDate,
+  formatDateToDDMMYYYY
 } from '../utils/rulesEngine';
 
 interface CalendarManagerProps {
@@ -40,8 +41,8 @@ interface CalendarManagerProps {
   timetables: Timetable[];
   academicCalendar: AcademicCalendarItem[];
   specialOverrides: SpecialDayOverride[];
-  onAddCalendarItem: (item: AcademicCalendarItem) => void;
-  onAddOverride: (override: SpecialDayOverride) => void;
+  onAddCalendarItem: (item: AcademicCalendarItem | AcademicCalendarItem[]) => void;
+  onAddOverride: (override: SpecialDayOverride | SpecialDayOverride[]) => void;
   onDeleteCalendarItem: (date: string) => void;
   onDeleteOverride: (date: string) => void;
   onTriggerShare: (date: string) => void;
@@ -71,7 +72,8 @@ export default function CalendarManager({
   // Local state for opening Add event modals
   const [isAddingEvent, setIsAddingEvent] = useState(false);
   const [eventForm, setEventForm] = useState({
-    date: '2026-06-12',
+    startDate: '2026-06-12',
+    endDate: '2026-06-12',
     name: 'College Cultural Fest',
     category: 'CalendarItem' as 'CalendarItem' | 'Override',
     type: 'Event' as DayType,
@@ -111,20 +113,58 @@ export default function CalendarManager({
     return `${currentYear}-${mm}-${dd}`;
   };
 
+  const getDatesInRange = (startDateStr: string, endDateStr: string): string[] => {
+    const startParts = startDateStr.split('-');
+    const endParts = endDateStr.split('-');
+    if (startParts.length !== 3 || endParts.length !== 3) {
+      return [startDateStr];
+    }
+    
+    const startYear = parseInt(startParts[0], 10);
+    const startMonth = parseInt(startParts[1], 10) - 1;
+    const startDay = parseInt(startParts[2], 10);
+    
+    const endYear = parseInt(endParts[0], 10);
+    const endMonth = parseInt(endParts[1], 10) - 1;
+    const endDay = parseInt(endParts[2], 10);
+    
+    const start = new Date(startYear, startMonth, startDay);
+    const end = new Date(endYear, endMonth, endDay);
+    
+    if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+      return [startDateStr];
+    }
+    
+    const dates: string[] = [];
+    const current = new Date(start);
+    while (current <= end) {
+      const yyyy = current.getFullYear();
+      const mm = String(current.getMonth() + 1).padStart(2, '0');
+      const dd = String(current.getDate()).padStart(2, '0');
+      dates.push(`${yyyy}-${mm}-${dd}`);
+      current.setDate(current.getDate() + 1);
+    }
+    return dates;
+  };
+
   const handleSaveEvent = (e: React.FormEvent) => {
     e.preventDefault();
+    const dates = getDatesInRange(eventForm.startDate, eventForm.endDate);
+    
     if (eventForm.category === 'Override') {
-      onAddOverride({
-        date: eventForm.date,
+      const overrides: SpecialDayOverride[] = dates.map(d => ({
+        date: d,
         type: eventForm.type as SpecialDayOverride['type'],
         note: eventForm.name
-      });
+      }));
+      onAddOverride(overrides);
     } else {
-      onAddCalendarItem({
-        date: eventForm.date,
+      const items: AcademicCalendarItem[] = dates.map(d => ({
+        date: d,
         type: eventForm.type as AcademicCalendarItem['type'],
         name: eventForm.name
-      });
+      }));
+      onAddCalendarItem(items);
     }
     setIsAddingEvent(false);
   };
@@ -338,7 +378,7 @@ export default function CalendarManager({
                     <div className="flex items-center space-x-2">
                       <Bookmark className="h-3.5 w-3.5 text-indigo-500 shrink-0" />
                       <div>
-                        <span className="font-mono font-bold mr-2">{item.date}</span>
+                        <span className="font-mono font-bold mr-2">{formatDateToDDMMYYYY(item.date)}</span>
                         <span className="font-sans font-medium">{item.name}</span>
                         <span className="ml-2 italic text-[10px] text-indigo-600 bg-white/80 px-1 rounded border border-indigo-100">
                           {item.type}
@@ -347,7 +387,7 @@ export default function CalendarManager({
                     </div>
                     <button
                       onClick={() => onDeleteCalendarItem(item.date)}
-                      className="text-indigo-600 hover:text-red-500 p-0.5"
+                      className="text-indigo-605 hover:text-red-500 p-0.5 text-indigo-600"
                     >
                       <Trash2 className="h-3.5 w-3.5" />
                     </button>
@@ -360,7 +400,7 @@ export default function CalendarManager({
                     <div className="flex items-center space-x-2">
                       <AlertCircle className="h-3.5 w-3.5 text-amber-500 shrink-0" />
                       <div>
-                        <span className="font-mono font-bold mr-2">{item.date}</span>
+                        <span className="font-mono font-bold mr-2">{formatDateToDDMMYYYY(item.date)}</span>
                         <span className="font-sans font-medium">{item.note}</span>
                         <span className="ml-2 italic text-[10px] text-amber-700 bg-white/80 px-1 rounded border border-amber-100">
                           {item.type} (Highest Priority)
@@ -369,7 +409,7 @@ export default function CalendarManager({
                     </div>
                     <button
                       onClick={() => onDeleteOverride(item.date)}
-                      className="text-amber-600 hover:text-red-500 p-0.5"
+                      className="text-amber-608 hover:text-red-500 p-0.5 text-amber-600"
                     >
                       <Trash2 className="h-3.5 w-3.5" />
                     </button>
@@ -546,17 +586,40 @@ export default function CalendarManager({
                 </div>
               </div>
 
-              <div className="space-y-1">
-                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-widest font-mono">
-                  Effective Date (YYYY-MM-DD)
-                </label>
-                <input
-                  type="date"
-                  required
-                  value={eventForm.date}
-                  onChange={(e) => setEventForm(f => ({ ...f, date: e.target.value }))}
-                  className="w-full text-xs font-mono border border-slate-200 rounded p-2 focus:ring-1 focus:ring-slate-800"
-                />
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-widest font-mono">
+                    Start Date (YYYY-MM-DD)
+                  </label>
+                  <input
+                    type="date"
+                    required
+                    value={eventForm.startDate}
+                    onChange={(e) => setEventForm(f => {
+                      const newStart = e.target.value;
+                      const updateEnd = !f.endDate || f.endDate === f.startDate || new Date(f.endDate) < new Date(newStart);
+                      return {
+                        ...f,
+                        startDate: newStart,
+                        endDate: updateEnd ? newStart : f.endDate
+                      };
+                    })}
+                    className="w-full text-xs font-mono border border-slate-200 rounded p-2 focus:ring-1 focus:ring-slate-800"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-widest font-mono">
+                    End Date (YYYY-MM-DD)
+                  </label>
+                  <input
+                    type="date"
+                    required
+                    value={eventForm.endDate}
+                    onChange={(e) => setEventForm(f => ({ ...f, endDate: e.target.value }))}
+                    className="w-full text-xs font-mono border border-slate-200 rounded p-2 focus:ring-1 focus:ring-slate-800"
+                  />
+                </div>
               </div>
 
               <div className="space-y-1">

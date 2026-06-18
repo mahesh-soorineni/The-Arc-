@@ -1,6 +1,12 @@
 {
   "name": "The Arc",
-  "description": "Rule-based attendance assistant for daily collection, timetables, academic calendars, analytics, forecasts, and safe bunk calculations.",
-  "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+  "description": "Rule-based attendance tracker with smart timetables, calendars, and safe bunk forecasts.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone",
+    "geolocation"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
 }

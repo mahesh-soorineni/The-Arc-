@@ -29,7 +29,8 @@ import {
   determineDayType,
   isAttendanceRequired,
   getTimetableForDate,
-  getDayOfWeekFromDate
+  getDayOfWeekFromDate,
+  formatDateToDDMMYYYY
 } from '../utils/rulesEngine';
 
 interface DailyAttendanceCollectorProps {
@@ -293,7 +294,7 @@ export default function DailyAttendanceCollector({
           <CalendarDays className="h-5 w-5 text-slate-500" />
           <div>
             <h3 className="font-sans font-semibold text-sm tracking-tight text-slate-900">
-              {dayInfo.name}, {currentDate}
+              {dayInfo.name}, {formatDateToDDMMYYYY(currentDate)}
             </h3>
             <p className="text-xs font-mono text-slate-500">
               Day Status: <span className="font-semibold text-slate-700">{dayType}</span>
@@ -627,7 +628,7 @@ export default function DailyAttendanceCollector({
             <div className="bg-slate-50 rounded-xl p-4 space-y-3.5 text-xs">
               <div className="flex justify-between border-b border-slate-100 pb-2">
                 <span className="text-slate-500">Date Logged:</span>
-                <span className="font-bold font-mono text-slate-800">{currentDate}</span>
+                <span className="font-bold font-mono text-slate-800">{formatDateToDDMMYYYY(currentDate)}</span>
               </div>
 
               <div className="flex justify-between border-b border-slate-100 pb-2">

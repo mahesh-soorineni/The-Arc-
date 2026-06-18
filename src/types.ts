@@ -82,4 +82,6 @@ export interface UserProfile {
   scholarship?: string;
   aadhar?: string;
   imageUrl?: string;
+  semesterStartDate?: string;
+  semesterEndDate?: string;
 }

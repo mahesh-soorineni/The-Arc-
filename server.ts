@@ -5,7 +5,7 @@
 
 import express from 'express';
 import path from 'path';
-import { GoogleGenAI, Type } from '@google/genai';
+import { GoogleGenAI, Type, ThinkingLevel } from '@google/genai';
 
 let aiClient: GoogleGenAI | null = null;
 
@@ -72,12 +72,14 @@ Execute processing precisely.`;
               mimeType: mimeType,
               data: fileData
             }
-          },
-          {
-            text: prompt
           }
         ],
         config: {
+          systemInstruction: prompt,
+          temperature: 0.1,
+          thinkingConfig: {
+            thinkingLevel: ThinkingLevel.LOW
+          },
           responseMimeType: 'application/json',
           responseSchema: {
             type: Type.OBJECT,

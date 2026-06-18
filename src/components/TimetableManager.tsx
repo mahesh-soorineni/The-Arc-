@@ -26,6 +26,7 @@ import {
   Timetable,
   TimetableSlot
 } from '../types';
+import { formatDateToDDMMYYYY } from '../utils/rulesEngine';
 
 interface TimetableManagerProps {
   subjects: Subject[];
@@ -42,6 +43,8 @@ interface TimetableManagerProps {
     semester: string;
     subjects: Subject[];
     timetableSlots: Record<string, TimetableSlot[]>;
+    semesterStartDate?: string;
+    semesterEndDate?: string;
   }) => void;
 }
 
@@ -63,6 +66,7 @@ export default function TimetableManager({
   const [file, setFile] = useState<File | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
   const [aiLoading, setAiLoading] = useState(false);
+  const [aiLoadingStep, setAiLoadingStep] = useState('Uploading document to low-latency server-side context...');
   const [aiError, setAiError] = useState<string | null>(null);
   const [importedData, setImportedData] = useState<{
     collegeName: string;
@@ -72,6 +76,9 @@ export default function TimetableManager({
     subjects: Subject[];
     timetableSlots: Record<string, TimetableSlot[]>;
   } | null>(null);
+
+  const [confirmSemesterStart, setConfirmSemesterStart] = useState('2026-05-01');
+  const [confirmSemesterEnd, setConfirmSemesterEnd] = useState('2026-11-30');
 
   // Subject editing states
   const [editingCode, setEditingCode] = useState<string | null>(null);
@@ -278,6 +285,26 @@ export default function TimetableManager({
       const fileData = resultStr.substring(commaIndex + 1);
       
       setAiLoading(true);
+      setAiLoadingStep('Uploading file with low-latency server-side context...');
+
+      // Dynamic progress messages to increase perceived speed and provide status transparency
+      const messages = [
+        'Connecting to Gemini 3.5-Flash (optimized latency mode)...',
+        'Extracting document metadata (institutional headers, program details)...',
+        'Parsing courses & mapping theoretical lectures vs practical labs...',
+        'Compiling weekly timetable slot sequences...',
+        'Cross-verifying subject codes & database alignment rules...',
+        'Finalizing structural calendar representation...'
+      ];
+      
+      let currentMsgIndex = 0;
+      const statusTimer = setInterval(() => {
+        if (currentMsgIndex < messages.length - 1) {
+          currentMsgIndex++;
+          setAiLoadingStep(messages[currentMsgIndex]);
+        }
+      }, 1300);
+
       try {
         const res = await fetch('/api/gemini/parse-timetable', {
           method: 'POST',
@@ -296,6 +323,7 @@ export default function TimetableManager({
         console.error(err);
         setAiError(err.message || 'Verification could not proceed.');
       } finally {
+        clearInterval(statusTimer);
         setAiLoading(false);
       }
     };
@@ -321,7 +349,11 @@ export default function TimetableManager({
 
   const handleApplyImport = () => {
     if (!importedData || !onImportTimetableAndProfile) return;
-    onImportTimetableAndProfile(importedData);
+    onImportTimetableAndProfile({
+      ...importedData,
+      semesterStartDate: confirmSemesterStart,
+      semesterEndDate: confirmSemesterEnd
+    });
     setImportedData(null);
     setFile(null);
   };
@@ -404,9 +436,9 @@ export default function TimetableManager({
               <Sparkles className="h-4 w-4 text-indigo-400 absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 animate-pulse" />
             </div>
             <div className="space-y-1.5 text-center">
-              <p className="text-xs font-semibold text-slate-200">Processing Document via Multimodal Intel...</p>
-              <p className="text-[10.5px] font-mono text-slate-400 max-w-sm animate-pulse leading-normal">
-                Detecting subjects, mapping experimental laboratory hours, and restructuring timetable matrices. Please hold...
+              <p className="text-xs font-semibold text-slate-200">Processing Timetable via Gemini Intel...</p>
+              <p className="text-[11px] font-mono text-blue-400 max-w-md animate-pulse leading-normal font-medium bg-blue-500/5 px-3 py-1.5 rounded-lg border border-blue-500/10">
+                {aiLoadingStep}
               </p>
             </div>
           </div>
@@ -415,19 +447,52 @@ export default function TimetableManager({
         {/* Analysis Results Display */}
         {importedData && (
           <div className="mt-5 space-y-5 animate-fadeIn relative z-10 font-sans text-xs">
-            {/* Detected Academic Profile Card */}
-            <div className="bg-[#121824] border border-blue-900/20 rounded-xl p-4 grid grid-cols-1 md:grid-cols-4 gap-4">
-              <div className="space-y-1 md:col-span-2">
-                <span className="block text-[9px] uppercase font-mono tracking-wider text-slate-500 font-bold">Institution / College</span>
-                <span className="text-xs font-bold text-white block truncate">{importedData.collegeName || 'N/A'}</span>
+            {/* Detected Academic Profile & Semester Dates Confirmation Card */}
+            <div className="bg-[#121824] border border-blue-900/20 rounded-xl p-4 space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div className="space-y-1 md:col-span-2">
+                  <span className="block text-[9px] uppercase font-mono tracking-wider text-slate-500 font-bold">Institution / College</span>
+                  <span className="text-xs font-bold text-white block truncate">{importedData.collegeName || 'N/A'}</span>
+                </div>
+                <div className="space-y-1">
+                  <span className="block text-[9px] uppercase font-mono tracking-wider text-slate-500 font-bold">Degree Program</span>
+                  <span className="text-xs font-semibold text-slate-200 block truncate">{importedData.degree || 'N/A'} ({importedData.branch || 'General'})</span>
+                </div>
+                <div className="space-y-1">
+                  <span className="block text-[9px] uppercase font-mono tracking-wider text-slate-500 font-bold">Semester Structure</span>
+                  <span className="text-xs font-bold text-blue-400 block">{importedData.semester || 'N/A'}</span>
+                </div>
               </div>
-              <div className="space-y-1">
-                <span className="block text-[9px] uppercase font-mono tracking-wider text-slate-500 font-bold">Degree Program</span>
-                <span className="text-xs font-semibold text-slate-200 block truncate">{importedData.degree || 'N/A'} ({importedData.branch || 'General'})</span>
-              </div>
-              <div className="space-y-1">
-                <span className="block text-[9px] uppercase font-mono tracking-wider text-slate-500 font-bold">Semester Structure</span>
-                <span className="text-xs font-bold text-blue-400 block">{importedData.semester || 'N/A'}</span>
+
+              <div className="border-t border-slate-800/80 pt-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-[#0c1018]/60 p-3 rounded-lg border border-white/5">
+                <div className="space-y-0.5">
+                  <span className="text-[10px] font-bold text-blue-400 block flex items-center gap-1">🗓️ CONFIRM SEMESTER DATE BOUNDARIES</span>
+                  <p className="text-[9.5px] text-slate-400 leading-normal">
+                    Attendance records and class slots will auto-allocate strictly between these start & end dates.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2.5">
+                  <div className="space-y-1 shrink-0">
+                    <span className="block text-[8px] uppercase font-mono tracking-wider text-slate-500 font-bold">Start Date</span>
+                    <input
+                      type="date"
+                      required
+                      value={confirmSemesterStart}
+                      onChange={(e) => setConfirmSemesterStart(e.target.value)}
+                      className="bg-black/50 border border-white/10 rounded px-2.5 py-1 text-[11px] font-mono text-white focus:outline-none focus:border-blue-500 transition cursor-pointer"
+                    />
+                  </div>
+                  <div className="space-y-1 shrink-0">
+                    <span className="block text-[8px] uppercase font-mono tracking-wider text-slate-500 font-bold">End Date</span>
+                    <input
+                      type="date"
+                      required
+                      value={confirmSemesterEnd}
+                      onChange={(e) => setConfirmSemesterEnd(e.target.value)}
+                      className="bg-black/50 border border-white/10 rounded px-2.5 py-1 text-[11px] font-mono text-white focus:outline-none focus:border-blue-500 transition cursor-pointer"
+                    />
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -526,7 +591,7 @@ export default function TimetableManager({
           <div className="space-y-0.5">
             <div className="flex items-center space-x-2">
               <BookOpen className="h-4 w-4 text-slate-500" />
-              <h3 className="font-sans font-bold text-sm text-slate-900 tracking-tight">Registered Subjects</h3>
+              <h3 className="font-sans font-bold text-sm text-slate-900 tracking-tight">Subjects</h3>
             </div>
             <p className="text-[10px] text-slate-400 font-medium">Tap on a subject to edit details</p>
           </div>
@@ -657,7 +722,7 @@ export default function TimetableManager({
               <h3 className="font-sans font-bold text-sm text-slate-900 tracking-tight">Hourly Class Schedule</h3>
             </div>
             <p className="text-[10px] font-mono text-slate-400">
-              Active version effective from: <span className="font-bold text-slate-600">{latestTimetable?.effectiveFrom || '2026-05-01'}</span>
+              Active version effective from: <span className="font-bold text-slate-600">{formatDateToDDMMYYYY(latestTimetable?.effectiveFrom || '2026-05-01')}</span>
             </p>
           </div>
 

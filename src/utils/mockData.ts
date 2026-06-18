@@ -91,13 +91,13 @@ export const INITIAL_SPECIAL_OVERRIDES: SpecialDayOverride[] = [
 export const INITIAL_USER_PROFILE: UserProfile = {
   name: 'SOORINENI MAHESH',
   collegeName: 'K.S.R.M. College of Engineering',
-  rollNo: '219Y1A3950',
+  rollNo: '249Y1A3958',
   course: 'B.Tech',
   degree: 'B.Tech',
   branch: 'AIML',
-  semester: 'IV Semester',
+  semester: '',
   mobile: '9392998960',
-  email: 'maheshntr9392@gmail.com',
+  email: '249Y1A3958@gmail.com',
   minAttendance: 75,
   dob: '16/01/2007',
   joiningDate: '19/08/2024',
@@ -106,7 +106,32 @@ export const INITIAL_USER_PROFILE: UserProfile = {
   category: 'BC_A, PATRA',
   scholarship: 'No',
   aadhar: '848689005327',
-  imageUrl: ''
+  imageUrl: '',
+  semesterStartDate: '2026-05-01',
+  semesterEndDate: '2026-11-30'
+};
+
+export const EMPTY_USER_PROFILE: UserProfile = {
+  name: '',
+  collegeName: '',
+  rollNo: '',
+  course: 'B.Tech',
+  degree: 'B.Tech',
+  branch: '',
+  semester: '',
+  mobile: '',
+  email: '',
+  minAttendance: 75,
+  dob: '',
+  joiningDate: '',
+  religion: '',
+  rank: '',
+  category: '',
+  scholarship: '',
+  aadhar: '',
+  imageUrl: '',
+  semesterStartDate: '2026-05-01',
+  semesterEndDate: '2026-11-30'
 };
 
 // Generates logs for preceding weeks from may to mid june 2026
