@@ -4,6 +4,7 @@
  */
 
 import React, { useState } from 'react';
+import { safeLocalStorage as localStorage } from '../utils/storage';
 import {
   Printer,
   ChevronDown,

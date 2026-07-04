@@ -4,6 +4,7 @@
  */
 
 import React, { useState, useEffect, useRef } from 'react';
+import { safeLocalStorage as localStorage } from './utils/storage';
 import {
   Sparkles,
   User,
@@ -64,8 +65,8 @@ import SettingsTab from './components/SettingsTab';
 import { SplashScreen, LoginScreen } from './components/SplashAndLogin';
 
 // Firebase authentication and Cloud Synchronization imports
-import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
-import { auth, signInWithGoogle, logout } from './lib/firebase';
+import { User as FirebaseUser } from 'firebase/auth';
+import { auth, signInWithGoogle, logout, onAuthStateChanged } from './lib/firebase';
 import {
   getUserProfileFromDb,
   saveUserProfileToDb,
@@ -522,24 +523,28 @@ export default function App() {
 
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
-      fileReader.readAsText(file, "UTF-8");
+      fileReader.readAsArrayBuffer(file);
       fileReader.onload = (event) => {
         try {
           if (!event.target?.result) {
             throw new Error("Could not read empty file.");
           }
-          const rawText = event.target.result as string;
+          const arrayBuffer = event.target.result as ArrayBuffer;
+
+          // Decode as Latin-1 (ISO-8859-1) for binary-safe marker lookup
+          const latin1Decoder = new TextDecoder('iso-8859-1');
+          const rawTextLatin1 = latin1Decoder.decode(arrayBuffer);
 
           const startMark = "%%THE_ARC_BACKUP_START%%";
           const endMark = "%%THE_ARC_BACKUP_END%%";
-          const startIndex = rawText.indexOf(startMark);
-          const endIndex = rawText.indexOf(endMark);
+          const startIndex = rawTextLatin1.indexOf(startMark);
+          const endIndex = rawTextLatin1.indexOf(endMark);
 
           let parsed: any = null;
 
           if (startIndex !== -1 && endIndex !== -1) {
-            // Found nested PDF backup data segment
-            const encodedData = rawText.substring(startIndex + startMark.length, endIndex).trim();
+            // Found nested PDF backup data segment - extract Base64 ASCII segment safely
+            const encodedData = rawTextLatin1.substring(startIndex + startMark.length, endIndex).trim();
             try {
               const decodedJson = decodeURIComponent(escape(atob(encodedData)));
               parsed = JSON.parse(decodedJson);
@@ -547,9 +552,11 @@ export default function App() {
               throw new Error("Unable to parse the embedded PDF backup stream block. The file might be corrupted.");
             }
           } else {
-            // Try fallback direct JSON parse for legacy backups compatibility
+            // Try standard UTF-8 decoding for direct JSON text file backups
             try {
-              parsed = JSON.parse(rawText);
+              const utf8Decoder = new TextDecoder('utf-8');
+              const rawTextUtf8 = utf8Decoder.decode(arrayBuffer);
+              parsed = JSON.parse(rawTextUtf8);
             } catch {
               throw new Error("No valid database backup sequence was discovered in the uploaded file. Please select a valid .pdf master backup or .json file exported by The Arc.");
             }
@@ -1512,6 +1519,9 @@ export default function App() {
                 minAttendanceSetting={userProfile.minAttendance}
                 onUpdateMinAttendance={(val) => saveProfileToStore({ ...userProfile, minAttendance: val })}
                 currentDate={currentDate}
+                academicCalendar={academicCalendar}
+                specialOverrides={specialOverrides}
+                userProfile={userProfile}
               />
             )}
 

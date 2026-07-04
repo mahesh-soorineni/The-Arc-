@@ -312,16 +312,23 @@ export default function TimetableManager({
           body: JSON.stringify({ fileData, mimeType: type })
         });
         
+        let data;
         if (!res.ok) {
-          const err = await res.json();
-          throw new Error(err.error || 'The server reported parsing issues.');
+          try {
+            const err = await res.json();
+            throw new Error(err.error || 'The server reported parsing issues.');
+          } catch {
+            throw new Error('Connection error. Server may be offline.');
+          }
+        } else {
+          data = await res.json();
         }
         
-        const data = await res.json();
         setImportedData(data);
       } catch (err: any) {
-        console.error(err);
-        setAiError(err.message || 'Verification could not proceed.');
+        console.error('Frontend error parsing timetable:', err);
+        setAiError(err.message || 'Timetable analysis failed. Please try again.');
+        setImportedData(null);
       } finally {
         clearInterval(statusTimer);
         setAiLoading(false);
@@ -447,6 +454,19 @@ export default function TimetableManager({
         {/* Analysis Results Display */}
         {importedData && (
           <div className="mt-5 space-y-5 animate-fadeIn relative z-10 font-sans text-xs">
+            {/* Fallback Banner Alert if Gemini API was offline or busy */}
+            {importedData.isFallback && (
+              <div className="bg-amber-950/20 border border-amber-500/25 text-amber-400 p-4 rounded-xl flex items-start space-x-3 animate-fadeIn">
+                <AlertCircle className="h-5 w-5 shrink-0 mt-0.5 text-amber-500 animate-pulse" />
+                <div className="space-y-1">
+                  <p className="font-bold text-amber-300 text-xs tracking-tight">Self-Healing Offline Fallback Mode Active</p>
+                  <p className="text-[11px] text-amber-300/80 leading-normal font-sans font-medium">
+                    {importedData.fallbackMessage}
+                  </p>
+                </div>
+              </div>
+            )}
+
             {/* Detected Academic Profile & Semester Dates Confirmation Card */}
             <div className="bg-[#121824] border border-blue-900/20 rounded-xl p-4 space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">

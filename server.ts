@@ -3,6 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import 'dotenv/config';
 import express from 'express';
 import path from 'path';
 import { GoogleGenAI, Type, ThinkingLevel } from '@google/genai';
@@ -26,6 +27,44 @@ function getGeminiClient(): GoogleGenAI {
     });
   }
   return aiClient;
+}
+
+// Robust, self-healing Gemini generator with exponential backoff retries and model alternate switching
+async function generateContentWithRetry(params: any): Promise<any> {
+  const modelsToTry = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-3.5-flash'];
+  let lastError: any = null;
+
+  for (const modelName of modelsToTry) {
+    let delay = 1000;
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        console.log(`[The Arc AI] Attempting timetable extraction using ${modelName} (attempt ${attempt}/3)...`);
+        const response = await getGeminiClient().models.generateContent({
+          ...params,
+          model: modelName,
+        });
+        console.log(`[The Arc AI] Extraction successful using ${modelName} on attempt ${attempt}.`);
+        return response;
+      } catch (error: any) {
+        lastError = error;
+        console.warn(`[The Arc AI] Attempt ${attempt} using ${modelName} failed:`, error.message || error);
+        
+        const errMsg = (error.message || '').toLowerCase();
+        // If the error is an API key error, missing key, or unauthorized, don't waste time retrying this model
+        if (errMsg.includes('api key') || errMsg.includes('unauthorized') || errMsg.includes('api_key') || errMsg.includes('not found') || errMsg.includes('invalid')) {
+          break; 
+        }
+
+        // Wait before next attempt (exponential backoff)
+        if (attempt < 3) {
+          console.log(`[The Arc AI] Retrying in ${delay}ms...`);
+          await new Promise((resolve) => setTimeout(resolve, delay));
+          delay *= 1.5;
+        }
+      }
+    }
+  }
+  throw lastError || new Error('All models and retries exhausted. Failed to parse document.');
 }
 
 async function startServer() {
@@ -64,8 +103,7 @@ Guidelines:
 
 Execute processing precisely.`;
 
-      const response = await getGeminiClient().models.generateContent({
-        model: 'gemini-3.5-flash',
+      const response = await generateContentWithRetry({
         contents: [
           {
             inlineData: {
@@ -191,12 +229,26 @@ Execute processing precisely.`;
           }
         }
       });
-
+ 
       const cleanJson = response.text?.trim() || '{}';
       res.json(JSON.parse(cleanJson));
     } catch (error: any) {
-      console.error('Failed to parse timetable via Gemini error:', error);
-      res.status(500).json({ error: error.message || 'Server failed to analyze the document.' });
+      console.error('Failed to parse timetable via Gemini after retries:', error);
+      
+      const errMsg = (error.message || '').toLowerCase();
+      let userFriendlyMessage = 'The Gemini intelligence server experienced an error. Please try uploading again.';
+      
+      if (!process.env.GEMINI_API_KEY) {
+        userFriendlyMessage = 'Your Gemini API Key is not set up on this computer. To make this work permanently on your PC, please add GEMINI_API_KEY="your_api_key" inside a .env file at the project root.';
+      } else if (errMsg.includes('api key') || errMsg.includes('unauthorized') || errMsg.includes('invalid') || errMsg.includes('not found')) {
+        userFriendlyMessage = 'Your GEMINI_API_KEY is invalid or unauthorized. Please verify the key inside your .env configuration.';
+      } else if (errMsg.includes('demand') || errMsg.includes('unavailable') || error.status === 'UNAVAILABLE' || errMsg.includes('503')) {
+        userFriendlyMessage = 'Gemini is currently under extremely high demand (Google 503 Service Unavailable). We attempted automatic retries and model failovers, but the service is temporarily locked. Please try uploading the file one more time in a few seconds.';
+      } else {
+        userFriendlyMessage = `Timetable extraction failed: ${error.message || 'Unknown error'}. Please try again.`;
+      }
+      
+      res.status(500).json({ error: userFriendlyMessage });
     }
   });
 
@@ -208,6 +260,22 @@ Execute processing precisely.`;
       appType: 'spa',
     });
     app.use(vite.middlewares);
+
+    // Explicit SPA fallback matching in development to prevent 404 / Page Not Found on routing refreshes
+    app.get('*', async (req, res, next) => {
+      if (req.path.startsWith('/api') || req.path.includes('.')) {
+        return next();
+      }
+      try {
+        const fs = await import('fs');
+        const indexHtmlPath = path.resolve(process.cwd(), 'index.html');
+        let template = fs.readFileSync(indexHtmlPath, 'utf8');
+        template = await vite.transformIndexHtml(req.originalUrl, template);
+        res.status(200).set({ 'Content-Type': 'text/html' }).end(template);
+      } catch (e) {
+        next(e);
+      }
+    });
   } else {
     const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));

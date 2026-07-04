@@ -1,11 +1,7 @@
 {
   "name": "The Arc",
   "description": "Rule-based attendance tracker with smart timetables, calendars, and safe bunk forecasts.",
-  "requestFramePermissions": [
-    "camera",
-    "microphone",
-    "geolocation"
-  ],
+  "requestFramePermissions": [],
   "majorCapabilities": [
     "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
   ]

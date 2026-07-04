@@ -407,6 +407,63 @@ export function calculateProjections(
   };
 }
 
+// Get exact remaining scheduled hours in the semester based on timetable/calendar
+export function getRemainingSemesterHours(
+  currentDate: string,
+  endDate: string,
+  timetables: Timetable[],
+  academicCalendar: AcademicCalendarItem[],
+  specialOverrides: SpecialDayOverride[]
+): {
+  totalRemainingHours: number;
+  subjectRemainingHours: Record<string, number>;
+} {
+  let totalRemainingHours = 0;
+  const subjectRemainingHours: Record<string, number> = {};
+
+  const parts = currentDate.split('-');
+  if (parts.length !== 3) return { totalRemainingHours, subjectRemainingHours };
+  
+  // Look forward from the next day onwards
+  const currentYear = parseInt(parts[0], 10);
+  const currentMonth = parseInt(parts[1], 10) - 1;
+  const currentDay = parseInt(parts[2], 10);
+  const start = new Date(currentYear, currentMonth, currentDay + 1);
+
+  const eParts = endDate.split('-');
+  if (eParts.length !== 3) return { totalRemainingHours, subjectRemainingHours };
+  const end = new Date(parseInt(eParts[0], 10), parseInt(eParts[1], 10) - 1, parseInt(eParts[2], 10));
+
+  if (start > end) {
+    return { totalRemainingHours, subjectRemainingHours };
+  }
+
+  for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    const dateStr = `${year}-${month}-${day}`;
+
+    const { dayType } = determineDayType(dateStr, specialOverrides, academicCalendar);
+    if (!isAttendanceRequired(dayType)) {
+      continue;
+    }
+
+    const ttable = getTimetableForDate(dateStr, timetables);
+    if (!ttable) continue;
+
+    const dayInfo = getDayOfWeekFromDate(dateStr);
+    const scheduledSlots = ttable.slots[dayInfo.indexStr] || [];
+
+    scheduledSlots.forEach(slot => {
+      totalRemainingHours += slot.hours;
+      subjectRemainingHours[slot.subjectCode] = (subjectRemainingHours[slot.subjectCode] || 0) + slot.hours;
+    });
+  }
+
+  return { totalRemainingHours, subjectRemainingHours };
+}
+
 // Calculate sequential recovery metrics (how many consecutive hours needed to recover to target %)
 export function calculateRecoveryRequired(
   attendedHours: number,

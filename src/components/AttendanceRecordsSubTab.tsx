@@ -4,6 +4,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
+import { safeLocalStorage as localStorage } from '../utils/storage';
 import {
   Calendar,
   Layers,

@@ -1,4 +1,5 @@
 import React from 'react';
+import { safeLocalStorage as localStorage } from '../utils/storage';
 import { motion } from 'motion/react';
 import { BookOpen, ShieldAlert, GraduationCap, ArrowRight } from 'lucide-react';
 
