@@ -314,12 +314,25 @@ export default function TimetableManager({
         
         let data;
         if (!res.ok) {
+          let errorText = '';
           try {
-            const err = await res.json();
-            throw new Error(err.error || 'The server reported parsing issues.');
+            const text = await res.text();
+            try {
+              const err = JSON.parse(text);
+              errorText = err.error || 'The server reported parsing issues.';
+            } catch {
+              if (res.status === 504) {
+                errorText = 'The request timed out (Render free tier limits requests to 30 seconds). Please try uploading a smaller file or a clearer image.';
+              } else if (res.status === 502 || res.status === 503) {
+                errorText = 'The server is temporarily overloaded or restarting. Please try again in a few seconds.';
+              } else {
+                errorText = `Server error (${res.status}): Please verify that your GEMINI_API_KEY environment variable is set in your Render settings.`;
+              }
+            }
           } catch {
-            throw new Error('Connection error. Server may be offline.');
+            errorText = 'Connection error. Server may be offline.';
           }
+          throw new Error(errorText);
         } else {
           data = await res.json();
         }

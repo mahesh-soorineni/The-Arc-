@@ -31,7 +31,7 @@ function getGeminiClient(): GoogleGenAI {
 
 // Robust, self-healing Gemini generator with exponential backoff retries and model alternate switching
 async function generateContentWithRetry(params: any): Promise<any> {
-  const modelsToTry = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-3.5-flash'];
+  const modelsToTry = ['gemini-2.5-flash', 'gemini-1.5-flash'];
   let lastError: any = null;
 
   for (const modelName of modelsToTry) {
@@ -39,9 +39,18 @@ async function generateContentWithRetry(params: any): Promise<any> {
     for (let attempt = 1; attempt <= 3; attempt++) {
       try {
         console.log(`[The Arc AI] Attempting timetable extraction using ${modelName} (attempt ${attempt}/3)...`);
+        
+        // Dynamically sanitize config depending on model support
+        const cleanConfig = { ...params.config };
+        // Delete thinkingConfig as standard 2.5/1.5 models do not support it
+        if (cleanConfig.thinkingConfig) {
+          delete cleanConfig.thinkingConfig;
+        }
+
         const response = await getGeminiClient().models.generateContent({
           ...params,
           model: modelName,
+          config: cleanConfig,
         });
         console.log(`[The Arc AI] Extraction successful using ${modelName} on attempt ${attempt}.`);
         return response;
@@ -50,9 +59,19 @@ async function generateContentWithRetry(params: any): Promise<any> {
         console.warn(`[The Arc AI] Attempt ${attempt} using ${modelName} failed:`, error.message || error);
         
         const errMsg = (error.message || '').toLowerCase();
-        // If the error is an API key error, missing key, or unauthorized, don't waste time retrying this model
-        if (errMsg.includes('api key') || errMsg.includes('unauthorized') || errMsg.includes('api_key') || errMsg.includes('not found') || errMsg.includes('invalid')) {
-          break; 
+        
+        // Check strictly for authentication, authorization or key-invalid issues to abort early
+        // Do NOT abort if the model is simply not supported/not found by this API key version
+        const isAuthError = (errMsg.includes('api key') && !errMsg.includes('model')) || 
+                            errMsg.includes('api_key') || 
+                            errMsg.includes('unauthorized') || 
+                            errMsg.includes('forbidden') ||
+                            errMsg.includes('invalid api key') ||
+                            errMsg.includes('key not valid');
+
+        if (isAuthError) {
+          console.error(`[The Arc AI] Critical Auth Error detected. Aborting.`, error);
+          throw error;
         }
 
         // Wait before next attempt (exponential backoff)
@@ -78,6 +97,12 @@ async function startServer() {
   // API router / endpoints
   app.post('/api/gemini/parse-timetable', async (req, res) => {
     try {
+      if (!process.env.GEMINI_API_KEY) {
+        return res.status(500).json({ 
+          error: 'Your Gemini API Key is not set up on Render. Please add GEMINI_API_KEY to your Environment Variables in your Render Web Service dashboard so the AI agent can parse your timetable.' 
+        });
+      }
+
       const { fileData, mimeType } = req.body;
 
       if (!fileData || !mimeType) {
