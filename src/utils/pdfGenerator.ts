@@ -218,7 +218,7 @@ export function generateUnifiedBackupPdf(options: GeneratePdfOptions): Blob {
   doc.setFontSize(8);
   doc.setTextColor(0, 0, 0);
 
-  doc.text('TOTAL', margin + 3, y + 5);
+  doc.text('TOTAL', colX_subject, y + 5);
   doc.text(`${totalScheduled}`, colX_held, y + 5, { align: 'center' });
   doc.text(`${totalAttended}`, colX_attend, y + 5, { align: 'center' });
   doc.text(`${totalMissed}`, colX_missed, y + 5, { align: 'center' });

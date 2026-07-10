@@ -664,7 +664,7 @@ export default function AttendanceRecordsSubTab({
     doc.setFontSize(8.5);
     doc.setTextColor(pdfTheme === 'portal' ? '#0F172A' : '#000000');
 
-    doc.text('TOTAL', colSubjectX - 4, y + 4.8, { align: 'right' });
+    doc.text('TOTAL', colSubjectX + 3, y + 4.8);
     doc.text(String(totalConducted), colHeldX + heldWidth / 2, y + 4.8, { align: 'center' });
     doc.text(String(totalAttended), colAttendX + attendWidth / 2, y + 4.8, { align: 'center' });
     doc.text(String(totalMissed), colMissedX + missedWidth / 2, y + 4.8, { align: 'center' });
