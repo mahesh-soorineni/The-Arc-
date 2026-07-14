@@ -89,6 +89,25 @@ import {
 } from './lib/sync';
 
 export default function App() {
+  // --- Online/Offline Connection State Indicator ---
+  const [isOnline, setIsOnline] = useState<boolean>(() => {
+    return typeof navigator !== 'undefined' ? navigator.onLine : true;
+  });
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
   // --- Stateful persistent system ---
   const [currentDate, setCurrentDate] = useState<string>('2026-06-12'); // Simulation date
   const [userProfile, setUserProfile] = useState<UserProfile>(EMPTY_USER_PROFILE);
@@ -267,7 +286,7 @@ export default function App() {
               try {
                 new Notification("Arc Attendance Alarm 📚", {
                   body: `You have ${pendingDays.length} unmarked attendance sessions. Tap to update before bunk limits narrow!`,
-                  icon: "/favicon.ico",
+                  icon: "/favicon.svg",
                   tag: "arc-scheduled-alert"
                 });
               } catch (e) {
@@ -940,16 +959,13 @@ export default function App() {
       {/* Sidebar - Sleek Theme left navigation drawer (desktop-only) */}
       <aside className="hidden md:flex md:w-64 shrink-0 flex-col border-b md:border-b-0 md:border-r border-white/5 bg-[#0D1117] px-6 py-8 print:hidden">
         <div className="flex items-center gap-3 mb-10 shrink-0">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-600 via-indigo-600 to-cyan-500 flex items-center justify-center text-white shadow-md shadow-blue-500/20 ring-1 ring-white/10 shrink-0">
-            <svg className="w-5.5 h-5.5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M3 20A9 9 0 0 1 21 20" />
-              <path d="M7 20A5 5 0 0 1 17 20" />
-              <circle cx="12" cy="7" r="1.5" fill="currentColor" />
-            </svg>
-          </div>
+          <img 
+            src="/favicon.svg" 
+            alt="The Arc Logo" 
+            className="w-10 h-10 object-contain rounded-xl shadow-md shadow-blue-500/10 shrink-0" 
+          />
           <div className="min-w-0">
             <h1 className="text-base font-black tracking-tight text-white uppercase whitespace-nowrap leading-none">THE ARC</h1>
-            <p className="text-[9px] text-slate-400 font-semibold tracking-normal mt-1 leading-tight">Never Guess Your Attendance Again</p>
           </div>
         </div>
         
@@ -1052,6 +1068,12 @@ export default function App() {
                   Local Storage
                 </span>
               </div>
+              <div className="flex justify-between items-center text-[10px]">
+                <span className="text-[#64748B] font-semibold">Network State:</span>
+                <span className={`font-mono font-bold text-[9px] uppercase tracking-wider ${isOnline ? 'text-emerald-400' : 'text-amber-400'}`}>
+                  {isOnline ? 'Online (Synced)' : 'Offline (Cached)'}
+                </span>
+              </div>
               <button
                 onClick={handleLogout}
                 className="w-full mt-2 h-7 rounded bg-red-500/10 hover:bg-red-500/25 text-red-400 hover:text-red-300 font-bold text-[10px] transition-all cursor-pointer text-center flex items-center justify-center font-sans"
@@ -1069,16 +1091,16 @@ export default function App() {
         {/* Mobile Top Header Cockpit (hidden on desktop screens) */}
         <header className="md:hidden border-b border-white/10 bg-[#0D1117]/90 backdrop-blur-md px-4 py-3 flex items-center justify-between sticky top-0 z-40 select-none">
           <div className="flex items-center gap-2.5 min-w-0 mr-2 flex-1">
-            <div className="w-8.5 h-8.5 rounded-lg bg-gradient-to-tr from-blue-600 via-indigo-600 to-cyan-500 flex items-center justify-center text-white shadow-md shadow-blue-900/20 ring-1 ring-white/10 shrink-0">
-              <svg className="w-4.5 h-4.5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M3 20A9 9 0 0 1 21 20" />
-                <path d="M7 20A5 5 0 0 1 17 20" />
-                <circle cx="12" cy="7" r="1.5" fill="currentColor" />
-              </svg>
-            </div>
+            <img 
+              src="/favicon.svg" 
+              alt="The Arc Logo" 
+              className="w-8.5 h-8.5 object-contain rounded-lg shadow-md shadow-blue-900/10 shrink-0" 
+            />
             <div className="min-w-0">
-              <h1 className="text-xs font-black tracking-tight text-white uppercase leading-none whitespace-nowrap">THE ARC</h1>
-              <p className="text-[7.5px] text-slate-400 font-medium tracking-normal mt-0.5 whitespace-nowrap leading-tight truncate">Never Guess Your Attendance Again</p>
+              <h1 className="text-xs font-black tracking-tight text-white uppercase leading-none whitespace-nowrap flex items-center gap-1.5">
+                <span>THE ARC</span>
+                <span className={`w-1.5 h-1.5 rounded-full ${isOnline ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`} title={isOnline ? "Online (Database connected)" : "Offline Mode (Local Storage active)"} />
+              </h1>
             </div>
           </div>
 
@@ -1192,6 +1214,17 @@ export default function App() {
             <div className="text-sm font-semibold text-white mt-1.5 flex items-center gap-2 justify-center sm:justify-start">
               <span>{formatDateToDDMMYYYY(currentDate)}</span>
               <span className="text-[10px] font-mono bg-blue-500/10 text-blue-400 border border-blue-500/20 px-1.5 py-0.5 rounded uppercase font-semibold">Live Mode</span>
+              {isOnline ? (
+                <span className="text-[10px] font-mono bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-1.5 py-0.5 rounded uppercase font-semibold flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  <span>Online</span>
+                </span>
+              ) : (
+                <span className="text-[10px] font-mono bg-amber-500/10 text-amber-400 border border-amber-500/20 px-1.5 py-0.5 rounded uppercase font-semibold flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                  <span>Offline</span>
+                </span>
+              )}
             </div>
           </div>
 

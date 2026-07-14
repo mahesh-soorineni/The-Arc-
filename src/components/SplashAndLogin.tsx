@@ -25,33 +25,19 @@ export function SplashScreen({ tagline }: SplashScreenProps) {
         className="text-center relative z-10 flex flex-col items-center"
       >
         {/* Animated Accent Logo Arc Representation */}
-        <motion.div 
+        <motion.img 
           initial={{ scale: 0.85, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
           transition={{ delay: 0.2, duration: 0.7, ease: "backOut" }}
-          className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-blue-600 via-indigo-600 to-cyan-500 flex items-center justify-center text-white shadow-xl shadow-blue-500/25 ring-1 ring-white/10 mb-6"
-        >
-          <svg className="w-9 h-9 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M3 20A9 9 0 0 1 21 20" />
-            <path d="M7 20A5 5 0 0 1 17 20" />
-            <circle cx="12" cy="7" r="1.5" fill="currentColor" />
-          </svg>
-        </motion.div>
+          src="/favicon.svg"
+          alt="The Arc Logo"
+          className="w-20 h-20 object-contain mb-6 shrink-0 rounded-2xl shadow-lg shadow-blue-500/15"
+        />
 
         {/* Large bold app name */}
         <h1 className="text-4xl font-extrabold tracking-widest text-transparent bg-clip-text bg-gradient-to-b from-white to-slate-300 font-sans uppercase">
           THE ARC
         </h1>
-
-        {/* Tagline below app name */}
-        <motion.p 
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.5, duration: 0.6 }}
-          className="text-xs xs:text-sm text-slate-400 font-mono tracking-wider mt-4 px-4 py-1.5 bg-white/[0.02] border border-white/5 rounded-full filter backdrop-blur-sm max-w-sm"
-        >
-          {tagline}
-        </motion.p>
       </motion.div>
 
       {/* Decorative Bottom branding watermark */}
@@ -203,19 +189,14 @@ export function LoginScreen({ onOfflineBypass, error }: LoginScreenProps) {
 
         {/* Brand Core Identity block */}
         <div className="flex flex-col items-center text-center mb-6">
-          <div className="w-12 h-12 rounded-xl bg-gradient-to-tr from-blue-600 via-indigo-600 to-cyan-500 flex items-center justify-center text-white shadow-lg shadow-blue-500/15 mb-3 ring-1 ring-white/10 shrink-0">
-            <svg className="w-6 h-6 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M3 20A9 9 0 0 1 21 20" />
-              <path d="M7 20A5 5 0 0 1 17 20" />
-              <circle cx="12" cy="7" r="1.5" fill="currentColor" />
-            </svg>
-          </div>
+          <img 
+            src="/favicon.svg" 
+            alt="The Arc Logo" 
+            className="w-16 h-16 object-contain mb-3 shrink-0 rounded-2xl shadow-lg shadow-blue-500/15" 
+          />
           <h2 className="text-xl font-black tracking-widest text-white uppercase font-sans">
             THE ARC
           </h2>
-          <p className="text-[11px] text-slate-400 font-medium tracking-wide mt-1 leading-none">
-            Attendance Records Companion
-          </p>
         </div>
 
         {screenMode === 'welcome' && existingProfile ? (

@@ -14,7 +14,12 @@ import {
   signOut,
   onAuthStateChanged as fbOnAuthStateChanged
 } from 'firebase/auth';
-import { getFirestore } from 'firebase/firestore';
+import { 
+  getFirestore, 
+  initializeFirestore, 
+  persistentLocalCache, 
+  persistentMultipleTabManager 
+} from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
 
 // Initialize the Firebase client instance
@@ -41,10 +46,20 @@ const makeMockDbProxy = (): any => {
 
 let db: any;
 try {
-  db = getFirestore(app, firebaseConfig.firestoreDatabaseId); /* CRITICAL */
+  // Attempt initialization with IndexedDB/LocalCache persistence for full offline functionality
+  db = initializeFirestore(app, {
+    localCache: persistentLocalCache({
+      tabManager: persistentMultipleTabManager()
+    })
+  }, firebaseConfig.firestoreDatabaseId); /* CRITICAL */
 } catch (e) {
-  console.warn("Firestore initialization failed. Using safety mock proxy.", e);
-  db = makeMockDbProxy();
+  try {
+    console.warn("Firestore initializeFirestore with persistence failed, falling back to standard getFirestore:", e);
+    db = getFirestore(app, firebaseConfig.firestoreDatabaseId); /* CRITICAL */
+  } catch (err) {
+    console.error("Firestore initialization failed completely. Using safety mock proxy.", err);
+    db = makeMockDbProxy();
+  }
 }
 
 let auth: any;

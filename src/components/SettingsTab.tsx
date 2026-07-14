@@ -83,6 +83,12 @@ export default function SettingsTab({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [profileUrlInput, setProfileUrlInput] = useState<string>(userProfile.imageUrl || '');
   const [isSavedBanner, setIsSavedBanner] = useState<boolean>(false);
+  const [remindersSavedBanner, setRemindersSavedBanner] = useState<boolean>(false);
+
+  const triggerRemindersSaved = () => {
+    setRemindersSavedBanner(true);
+    setTimeout(() => setRemindersSavedBanner(false), 2000);
+  };
 
   const [notificationPermission, setNotificationPermission] = useState<string>(
     typeof window !== 'undefined' && 'Notification' in window ? Notification.permission : 'unsupported'
@@ -117,7 +123,7 @@ export default function SettingsTab({
     try {
       new Notification("The Arc Attendance Desk", {
         body: "📚 This is a test reminder! Consistent tracking keeps you safe from university attendance shortage.",
-        icon: "/favicon.ico",
+        icon: "/favicon.svg",
         tag: "arc-test-reminder"
       });
     } catch (err) {
@@ -132,6 +138,7 @@ export default function SettingsTab({
     } else {
       onUpdateNotificationDays([...notificationDays, day]);
     }
+    triggerRemindersSaved();
   };
 
   // Profile local form state
@@ -564,6 +571,11 @@ export default function SettingsTab({
                     <h4 className="text-xs font-bold text-white flex items-center gap-1.5">
                       <Bell className="h-4 w-4 text-blue-400 shrink-0 animate-pulse" />
                       <span>Smart Attendance Reminders</span>
+                      {remindersSavedBanner && (
+                        <span className="text-[9px] font-mono font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 rounded animate-pulse shrink-0">
+                          ✓ Saved & Scheduled
+                        </span>
+                      )}
                     </h4>
                     <p className="text-[9px] text-slate-400">
                       Configure automated daily alarms to keep your compliance scores high.
@@ -571,7 +583,10 @@ export default function SettingsTab({
                   </div>
                   <button
                     type="button"
-                    onClick={() => onToggleAutoReminders(!autoRemindersEnabled)}
+                    onClick={() => {
+                      onToggleAutoReminders(!autoRemindersEnabled);
+                      triggerRemindersSaved();
+                    }}
                     className={`relative inline-flex h-5 w-9.5 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
                       autoRemindersEnabled ? 'bg-blue-600' : 'bg-slate-800'
                     }`}
@@ -596,7 +611,10 @@ export default function SettingsTab({
                         <input
                           type="time"
                           value={notificationTime}
-                          onChange={(e) => onUpdateNotificationTime(e.target.value)}
+                          onChange={(e) => {
+                            onUpdateNotificationTime(e.target.value);
+                            triggerRemindersSaved();
+                          }}
                           className="w-full bg-black/40 border border-white/10 rounded-lg p-2 font-mono font-bold text-white outline-none focus:border-blue-500 transition text-center"
                           id="settings-notification-time-picker"
                         />
@@ -608,7 +626,10 @@ export default function SettingsTab({
                         </label>
                         <select
                           value={notificationChannel}
-                          onChange={(e) => onUpdateNotificationChannel(e.target.value)}
+                          onChange={(e) => {
+                            onUpdateNotificationChannel(e.target.value);
+                            triggerRemindersSaved();
+                          }}
                           className="w-full bg-black/40 border border-white/10 rounded-lg p-2 text-slate-200 font-semibold outline-none focus:border-blue-500 transition text-xs"
                           id="settings-notification-channel-select"
                         >

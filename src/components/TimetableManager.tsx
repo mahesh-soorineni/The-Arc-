@@ -19,7 +19,9 @@ import {
   Upload,
   Loader2,
   CheckCircle2,
-  AlertCircle
+  AlertCircle,
+  Copy,
+  Pencil
 } from 'lucide-react';
 import {
   Subject,
@@ -27,6 +29,55 @@ import {
   TimetableSlot
 } from '../types';
 import { formatDateToDDMMYYYY } from '../utils/rulesEngine';
+import { parseTextHeuristically } from '../utils/offlineParser';
+import Tesseract from 'tesseract.js';
+
+const extractTextFromImage = async (file: File, onProgress?: (pct: number) => void): Promise<string> => {
+  const result = await Tesseract.recognize(
+    file,
+    'eng',
+    {
+      logger: m => {
+        if (m.status === 'recognizing' && onProgress) {
+          onProgress(Math.round(m.progress * 100));
+        }
+      }
+    }
+  );
+  return result.data.text;
+};
+
+const loadPdfJs = (): Promise<any> => {
+  return new Promise((resolve, reject) => {
+    if ((window as any).pdfjsLib) {
+      resolve((window as any).pdfjsLib);
+      return;
+    }
+    const script = document.createElement('script');
+    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js';
+    script.onload = () => {
+      const pdfjsLib = (window as any).pdfjsLib;
+      pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
+      resolve(pdfjsLib);
+    };
+    script.onerror = () => reject(new Error('Failed to load local PDF parser. Please check your network connection.'));
+    document.head.appendChild(script);
+  });
+};
+
+const extractTextFromPdf = async (file: File): Promise<string> => {
+  const pdfjs = await loadPdfJs();
+  const arrayBuffer = await file.arrayBuffer();
+  const pdf = await pdfjs.getDocument({ data: arrayBuffer }).promise;
+  let fullText = '';
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const textContent = await page.getTextContent();
+    const pageText = textContent.items.map((item: any) => (item as any).str).join(' ');
+    fullText += pageText + '\n';
+  }
+  return fullText;
+};
 
 interface TimetableManagerProps {
   subjects: Subject[];
@@ -65,6 +116,7 @@ export default function TimetableManager({
   // AI Auto-Importer States
   const [file, setFile] = useState<File | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
+  const [scanEngine, setScanEngine] = useState<'local' | 'gemini'>('local');
   const [aiLoading, setAiLoading] = useState(false);
   const [aiLoadingStep, setAiLoadingStep] = useState('Uploading document to low-latency server-side context...');
   const [aiError, setAiError] = useState<string | null>(null);
@@ -79,6 +131,23 @@ export default function TimetableManager({
 
   const [confirmSemesterStart, setConfirmSemesterStart] = useState('2026-05-01');
   const [confirmSemesterEnd, setConfirmSemesterEnd] = useState('2026-11-30');
+
+  // Offline Text Importer States
+  const [importMode, setImportMode] = useState<'prompt' | 'scan'>('prompt');
+  const [promptCopied, setPromptCopied] = useState(false);
+  const [rawText, setRawText] = useState(
+    `# Define your Subjects first (FORMAT -> CODE: Full Name)\n` +
+    `DBMS: Database Management Systems\n` +
+    `OS: Operating Systems\n` +
+    `DBMS_LAB: DBMS Lab (isLab: true)\n` +
+    `OS_LAB: Operating Systems Lab (isLab: true, labHours: 3)\n\n` +
+    `# Specify daily class slots (FORMAT -> Day: CODE, CODE, ...)\n` +
+    `Monday: DBMS, OS, DBMS_LAB\n` +
+    `Tuesday: OS(1h), DBMS(1h)\n` +
+    `Wednesday: DBMS, OS_LAB(3h)\n` +
+    `Thursday: DBMS(1h), OS(1h)\n` +
+    `Friday: OS(1h), DBMS_LAB(3h)`
+  );
 
   // Subject editing states
   const [editingCode, setEditingCode] = useState<string | null>(null);
@@ -163,6 +232,50 @@ export default function TimetableManager({
 
   // Resolve current active/latest timetable configuration for display
   const latestTimetable = timetables[timetables.length - 1];
+
+  // Active Timetable Slot editing states
+  const [editingSlotKey, setEditingSlotKey] = useState<{ day: string; index: number } | null>(null);
+  const [editingSlotForm, setEditingSlotForm] = useState({
+    subjectCode: '',
+    hours: 1
+  });
+
+  const handleStartEditSlot = (day: string, index: number, slot: TimetableSlot) => {
+    setEditingSlotKey({ day, index });
+    setEditingSlotForm({
+      subjectCode: slot.subjectCode,
+      hours: slot.hours
+    });
+  };
+
+  const handleAddSlotToActiveDay = () => {
+    if (!latestTimetable) return;
+    const updatedSlots = { ...latestTimetable.slots };
+    const daySlots = [...(updatedSlots[activeDayTab] || [])];
+    
+    // Default new slot with first subject code or NEW_SUBJ
+    const defaultCode = subjects[0]?.code || 'NEW_SUB';
+    const newSlot: TimetableSlot = {
+      subjectCode: defaultCode,
+      hours: 1
+    };
+    
+    daySlots.push(newSlot);
+    updatedSlots[activeDayTab] = daySlots;
+    
+    onReplaceTimetable({
+      ...latestTimetable,
+      slots: updatedSlots
+    });
+    
+    // Automatically set to edit mode
+    const newIndex = daySlots.length - 1;
+    setEditingSlotKey({ day: activeDayTab, index: newIndex });
+    setEditingSlotForm({
+      subjectCode: newSlot.subjectCode,
+      hours: newSlot.hours
+    });
+  };
 
   const handleCreateSubject = (e: React.FormEvent) => {
     e.preventDefault();
@@ -278,6 +391,65 @@ export default function TimetableManager({
 
     setFile(selectedFile);
     
+    // Completely offline local file extraction (No API Key required)
+    if (scanEngine === 'local') {
+      setAiLoading(true);
+      if (type === 'application/pdf') {
+        setAiLoadingStep('Reading PDF text structure offline in your browser...');
+        extractTextFromPdf(selectedFile)
+          .then((text) => {
+            setAiLoadingStep('Running local heuristics to identify schedule components...');
+            const parsed = parseTextHeuristically(text);
+            setImportedData(parsed);
+          })
+          .catch((err) => {
+            console.error('Offline PDF parser failed:', err);
+            setAiError(err.message || 'Offline PDF extraction failed.');
+          })
+          .finally(() => {
+            setAiLoading(false);
+          });
+      } else if (type.includes('image/')) {
+        setAiLoadingStep('Initializing offline browser OCR engine (0%)...');
+        extractTextFromImage(selectedFile, (progress) => {
+          setAiLoadingStep(`Extracting text from image locally in browser (${progress}%)...`);
+        })
+          .then((text) => {
+            setAiLoadingStep('Running local heuristics to identify schedule components...');
+            const parsed = parseTextHeuristically(text);
+            setImportedData(parsed);
+          })
+          .catch((err) => {
+            console.error('Offline Image OCR parser failed:', err);
+            setAiError(err.message || 'Offline image OCR extraction failed.');
+          })
+          .finally(() => {
+            setAiLoading(false);
+          });
+      }
+      return;
+    }
+    
+    // Direct offline browser-side PDF text extraction and parsing
+    if (type === 'application/pdf' && importMode === 'text') {
+      setAiLoading(true);
+      setAiLoadingStep('Reading PDF text structure offline in your browser...');
+      extractTextFromPdf(selectedFile)
+        .then((text) => {
+          setAiLoadingStep('Running local heuristics to identify schedule components...');
+          const parsed = parseTextHeuristically(text);
+          setImportedData(parsed);
+        })
+        .catch((err) => {
+          console.error('Offline PDF parser failed:', err);
+          setAiError(err.message || 'Offline PDF extraction failed.');
+        })
+        .finally(() => {
+          setAiLoading(false);
+        });
+      return;
+    }
+    
     const reader = new FileReader();
     reader.onload = async () => {
       const resultStr = reader.result as string;
@@ -314,6 +486,22 @@ export default function TimetableManager({
         
         let data;
         if (!res.ok) {
+          // Automatic Client-Side Fallback if the server fails/has no API Key and the file is a PDF
+          if (type === 'application/pdf') {
+            console.log('Gemini API key is invalid or missing. Attempting browser-side offline fallback...');
+            setAiLoadingStep('API Key inactive. Extracting timetable text offline...');
+            try {
+              const text = await extractTextFromPdf(selectedFile);
+              const parsed = parseTextHeuristically(text);
+              setImportedData(parsed);
+              clearInterval(statusTimer);
+              setAiLoading(false);
+              return;
+            } catch (fallbackErr: any) {
+              console.error('Browser-side fallback also failed:', fallbackErr);
+            }
+          }
+
           let errorText = '';
           try {
             const text = await res.text();
@@ -332,6 +520,12 @@ export default function TimetableManager({
           } catch {
             errorText = 'Connection error. Server may be offline.';
           }
+
+          // If it's an image and there's no API key, give them clear advice to copy text or use PDF
+          if (type.includes('image/') && (errorText.includes('API key') || errorText.includes('key is invalid') || errorText.includes('unauthorized') || errorText.includes('GEMINI_API_KEY'))) {
+            errorText = 'Image analysis requires a valid GEMINI_API_KEY. For a completely offline, free, and API-key-free extraction, please upload a PDF copy of your timetable or use our Offline Quick Text tab to copy-paste your schedule details!';
+          }
+
           throw new Error(errorText);
         } else {
           data = await res.json();
@@ -378,6 +572,250 @@ export default function TimetableManager({
     setFile(null);
   };
 
+  const handleTextImport = () => {
+    setAiError(null);
+    setImportedData(null);
+
+    try {
+      const lines = rawText.split('\n');
+      const subjectsMap: Record<string, Subject> = {};
+      const timetableSlots: Record<string, TimetableSlot[]> = {
+        '1': [], '2': [], '3': [], '4': [], '5': [], '6': [], '0': []
+      };
+
+      const dayKeywords: Record<string, string> = {
+        'monday': '1', 'mon': '1',
+        'tuesday': '2', 'tue': '2',
+        'wednesday': '3', 'wed': '3',
+        'thursday': '4', 'thu': '4',
+        'friday': '5', 'fri': '5',
+        'saturday': '6', 'sat': '6',
+        'sunday': '0', 'sun': '0'
+      };
+
+      // PASS 1: Identify all subject definitions to build the complete subjects map
+      for (let line of lines) {
+        line = line.trim();
+        if (!line || line.startsWith('#') || line.startsWith('//')) {
+          continue;
+        }
+
+        if (line.includes(':') || line.includes(' - ')) {
+          const parts = line.includes(':') ? line.split(':') : line.split(' - ');
+          const left = parts[0].trim().toUpperCase();
+          const right = parts[1].trim();
+
+          // If the left side is NOT a day keyword, it's a subject definition line!
+          if (!dayKeywords[left.toLowerCase()]) {
+            const code = left;
+            let name = right;
+            let isLab = code.toLowerCase().includes('lab') || name.toLowerCase().includes('lab') || name.toLowerCase().includes('practical') || name.toLowerCase().includes('workshop');
+            let labHours = isLab ? 3 : undefined;
+
+            const optionMatch = name.match(/\(([^)]+)\)/);
+            if (optionMatch) {
+              const optStr = optionMatch[1].toLowerCase();
+              if (optStr.includes('lab') || optStr.includes('practical') || optStr.includes('true')) {
+                isLab = true;
+              }
+              const hourMatch = optStr.match(/(\d+)\s*(?:h|hr|hours)/);
+              if (hourMatch) {
+                labHours = parseInt(hourMatch[1]);
+              }
+              name = name.replace(/\([^)]+\)/, '').trim();
+            }
+
+            subjectsMap[code] = {
+              code,
+              name,
+              isLab,
+              labHours
+            };
+          }
+        }
+      }
+
+      // PASS 2: Parse day slots and map subject codes to timeslots with accurate hour durations
+      for (let line of lines) {
+        line = line.trim();
+        if (!line || line.startsWith('#') || line.startsWith('//')) {
+          continue;
+        }
+
+        if (line.includes(':') || line.includes(' - ')) {
+          const parts = line.includes(':') ? line.split(':') : line.split(' - ');
+          const left = parts[0].trim().toUpperCase();
+          const right = parts[1].trim();
+
+          if (dayKeywords[left.toLowerCase()]) {
+            const dayIdx = dayKeywords[left.toLowerCase()];
+            const tokens = right.split(/[,;\s]+/).map(t => t.trim().toUpperCase()).filter(Boolean);
+            
+            const counts: Record<string, number> = {};
+            tokens.forEach(token => {
+              let code = token;
+              let hours = 1;
+              const matches = token.match(/^([A-Z0-9_-]+)(?:\((\d+)(?:H|HR|HRS)?\)|-(\d+)(?:H|HR|HRS)?)?$/i);
+              if (matches) {
+                code = matches[1].toUpperCase();
+                if (matches[2]) hours = parseInt(matches[2]);
+                else if (matches[3]) hours = parseInt(matches[3]);
+              } else {
+                // No explicit hour suffix on this token. Let's resolve default duration from subjectsMap.
+                const isLab = subjectsMap[code]?.isLab || code.toLowerCase().includes('lab') || code.toLowerCase().includes('pract');
+                if (isLab) {
+                  hours = subjectsMap[code]?.labHours || 3;
+                }
+              }
+              counts[code] = (counts[code] || 0) + hours;
+            });
+
+            Object.entries(counts).forEach(([subCode, hours]) => {
+              let finalHours = hours;
+              const isLab = subjectsMap[subCode]?.isLab || subCode.toLowerCase().includes('lab') || subCode.toLowerCase().includes('pract');
+              
+              if (isLab) {
+                // If it is a lab and no token had an explicit hour suffix (e.g. they wrote DW_LAB instead of DW_LAB(2)),
+                // then default to the defined lab session hours (typically 3) regardless of duplicate references.
+                const hasExplicit = tokens.some(token => {
+                  const m = token.match(/^([A-Z0-9_-]+)(?:\((\d+)(?:H|HR|HRS)?\)|-(\d+)(?:H|HR|HRS)?)?$/i);
+                  return m && m[1].toUpperCase() === subCode && (m[2] || m[3]);
+                });
+                if (!hasExplicit) {
+                  finalHours = subjectsMap[subCode]?.labHours || 3;
+                }
+              }
+
+              timetableSlots[dayIdx].push({
+                subjectCode: subCode,
+                hours: finalHours
+              });
+              
+              if (!subjectsMap[subCode]) {
+                const isLabCode = subCode.toLowerCase().includes('lab') || subCode.toLowerCase().includes('pract');
+                subjectsMap[subCode] = {
+                  code: subCode,
+                  name: subCode.replace(/_/g, ' '),
+                  isLab: isLabCode,
+                  labHours: isLabCode ? 3 : undefined
+                };
+              }
+            });
+            continue;
+          }
+        } else {
+          // Lines without colon starting with a day name directly
+          const words = line.split(/\s+/);
+          const firstWord = words[0].toLowerCase().replace(/[^a-z]/g, '');
+          if (dayKeywords[firstWord]) {
+            const dayIdx = dayKeywords[firstWord];
+            const tokens = words.slice(1).map(w => w.trim().toUpperCase().replace(/[,;]/g, '')).filter(Boolean);
+            
+            const counts: Record<string, number> = {};
+            tokens.forEach(token => {
+              let code = token;
+              let hours = 1;
+              const matches = token.match(/^([A-Z0-9_-]+)(?:\((\d+)\)|-(\d+))?$/i);
+              if (matches) {
+                code = matches[1].toUpperCase();
+                if (matches[2]) hours = parseInt(matches[2]);
+                else if (matches[3]) hours = parseInt(matches[3]);
+              } else {
+                const isLab = subjectsMap[code]?.isLab || code.toLowerCase().includes('lab') || code.toLowerCase().includes('pract');
+                if (isLab) {
+                  hours = subjectsMap[code]?.labHours || 3;
+                }
+              }
+              counts[code] = (counts[code] || 0) + hours;
+            });
+
+            Object.entries(counts).forEach(([subCode, hours]) => {
+              let finalHours = hours;
+              const isLab = subjectsMap[subCode]?.isLab || subCode.toLowerCase().includes('lab') || subCode.toLowerCase().includes('pract');
+              
+              if (isLab) {
+                const hasExplicit = tokens.some(token => {
+                  const m = token.match(/^([A-Z0-9_-]+)(?:\((\d+)\)|-(\d+))?$/i);
+                  return m && m[1].toUpperCase() === subCode && (m[2] || m[3]);
+                });
+                if (!hasExplicit) {
+                  finalHours = subjectsMap[subCode]?.labHours || 3;
+                }
+              }
+
+              timetableSlots[dayIdx].push({
+                subjectCode: subCode,
+                hours: finalHours
+              });
+              
+              if (!subjectsMap[subCode]) {
+                const isLabCode = subCode.toLowerCase().includes('lab') || subCode.toLowerCase().includes('pract');
+                subjectsMap[subCode] = {
+                  code: subCode,
+                  name: subCode.replace(/_/g, ' '),
+                  isLab: isLabCode,
+                  labHours: isLabCode ? 3 : undefined
+                };
+              }
+            });
+          }
+        }
+      }
+
+      const subjectsList = Object.values(subjectsMap);
+
+      if (subjectsList.length === 0) {
+        throw new Error('No valid subjects or schedule days detected. Please check the spelling/syntax of your text.');
+      }
+
+      const totalSlots = Object.values(timetableSlots).reduce((acc, curr) => acc + curr.length, 0);
+      if (totalSlots === 0) {
+        throw new Error('No weekly schedule slots were parsed. Please specify periods for days, e.g. "Monday: DBMS, OS"');
+      }
+
+      setImportedData({
+        collegeName: 'My University / College',
+        degree: 'Degree Program',
+        branch: 'General',
+        semester: 'Current Semester',
+        subjects: subjectsList,
+        timetableSlots: timetableSlots
+      });
+    } catch (err: any) {
+      setAiError(err.message || 'Failed to parse raw text format. Please check the spelling/syntax.');
+    }
+  };
+
+  const gptPromptText = `Act as an expert Academic Schedule Analyzer. I am uploading an image or document containing my university class timetable.
+
+Please analyze the timetable and extract the subjects and weekly slots. 
+
+Follow these rules strictly:
+1. Identify all unique subjects/modules. Provide a unique uppercase abbreviation/code for each, and its full name.
+2. For lab/practical sessions, append \`(isLab: true)\` or \`(isLab: true, labHours: 3)\` depending on their duration (standard labs are 3 hours, but can be customized).
+3. Specify class occurrences for each day (Monday through Saturday/Sunday if they have classes). Format classes as \`SubjectCode(hours)\` (e.g. \`OS(1h)\` or \`OS_LAB(3h)\`) to lock the exact hours/periods of that class.
+4. Output the results ONLY as plain text matching the EXACT template syntax shown below. Do NOT write any introduction, pleasantries, explanation, or wrap it in a markdown block. Just output the clean text.
+
+EXACT OUTPUT FORMAT TEMPLATE:
+Define your Subjects first (FORMAT -> CODE: Full Name)
+DBMS: Database Management Systems
+OS: Operating Systems
+DBMS_LAB: DBMS Lab (isLab: true)
+OS_LAB: Operating Systems Lab (isLab: true, labHours: 3)
+
+# Specify daily class slots (FORMAT -> Day: CODE, CODE, ...)
+Monday: DBMS, OS, DBMS_LAB
+Tuesday: OS(1h), DBMS(1h)
+Wednesday: DBMS, OS_LAB(3h)
+Thursday: DBMS(1h), OS(1h)
+Friday: OS(1h), DBMS_LAB(3h)`;
+
+  const handleCopyPrompt = () => {
+    navigator.clipboard.writeText(gptPromptText);
+    setPromptCopied(true);
+    setTimeout(() => setPromptCopied(false), 2000);
+  };
+
   return (
     <div className="space-y-6 w-full">
       {/* AI Timetable & Syllabus Auto-Importer (Sleek Cosmic Card) */}
@@ -389,58 +827,170 @@ export default function TimetableManager({
         <div className="flex flex-col md:flex-row md:items-center justify-between pb-4 border-b border-white/5 gap-4 relative z-10">
           <div className="space-y-1.5">
             <div className="flex items-center space-x-2">
-              <span className="bg-gradient-to-r from-blue-500 to-indigo-500 text-white text-[9px] font-mono font-bold px-2.5 py-0.5 rounded-full tracking-wider uppercase shadow-xs">
-                AI Agent Enabled
+              <span className="bg-gradient-to-r from-blue-500 to-indigo-500 text-white text-[9px] font-mono font-bold px-2.5 py-0.5 rounded-full tracking-wider uppercase shadow-xs animate-pulse">
+                Highly Accurate
               </span>
-              <Sparkles className="h-4.5 w-4.5 text-blue-400 animate-pulse" />
-              <h2 className="font-sans font-bold text-base text-white tracking-tight">AI Timetable & Syllabus Auto-Importer</h2>
+              <Sparkles className="h-4.5 w-4.5 text-blue-400" />
+              <h2 className="font-sans font-bold text-base text-white tracking-tight">TT Extractor</h2>
             </div>
             <p className="text-xs text-slate-400 max-w-2xl leading-relaxed">
-              Upload your semester schedule screenshot, lecture list PDF, or class calendar image. The built-in Multimodal Gemini model will automatically parse courses, extract lab periods, and configure your entire semester structure.
+              Unlock perfect timetable extraction by combining ChatGPT/Claude's vision with our high-fidelity schedule scanner. Just copy the prompt, upload your schedule image there, and paste the output here!
             </p>
           </div>
         </div>
 
-        {/* Upload Zone */}
+        {/* Import Mode Selector Tab Bar */}
         {!importedData && !aiLoading && (
-          <div className="mt-5 relative z-10">
-            <div
-              onDragOver={handleDragOver}
-              onDragLeave={handleDragLeave}
-              onDrop={handleDrop}
-              className={`border-2 border-dashed rounded-xl p-8 text-center transition-all cursor-pointer flex flex-col items-center justify-center space-y-3 ${
-                isDragOver
-                  ? 'border-blue-500 bg-blue-500/10'
-                  : 'border-slate-800 bg-[#0A0D14]/50 hover:bg-[#0A0D14] hover:border-slate-700'
+          <div className="flex space-x-1.5 border-b border-white/5 pb-4 mt-3 relative z-10">
+            <button
+              type="button"
+              onClick={() => setImportMode('prompt')}
+              className={`px-4 py-1.5 rounded-lg text-xs font-semibold tracking-tight transition cursor-pointer ${
+                importMode === 'prompt'
+                  ? 'bg-blue-600 text-white font-bold shadow-md shadow-blue-500/10'
+                  : 'text-slate-400 hover:text-white hover:bg-white/5'
               }`}
-              onClick={() => document.getElementById('timetable-file-input')?.click()}
             >
-              <input
-                id="timetable-file-input"
-                type="file"
-                className="hidden"
-                accept="image/*,application/pdf"
-                onChange={handleFileChange}
-              />
-              <div className="h-11 w-11 rounded-full bg-slate-800/80 flex items-center justify-center text-slate-400 shadow-inner group-hover:scale-105 transition-transform">
-                <Upload className="h-5 w-5" />
+              1. Copy AI Prompt
+            </button>
+            <button
+              type="button"
+              onClick={() => setImportMode('scan')}
+              className={`px-4 py-1.5 rounded-lg text-xs font-semibold tracking-tight transition cursor-pointer ${
+                importMode === 'scan'
+                  ? 'bg-blue-600 text-white font-bold shadow-md shadow-blue-500/10'
+                  : 'text-slate-400 hover:text-white hover:bg-white/5'
+              }`}
+            >
+              2. Paste & Scan Timetable
+            </button>
+          </div>
+        )}
+
+        {/* Option 1: Copy AI Prompt View */}
+        {!importedData && !aiLoading && importMode === 'prompt' && (
+          <div className="mt-5 relative z-10 space-y-4 font-sans text-xs">
+            <div className="bg-[#121824] border border-blue-900/20 p-4 rounded-xl space-y-3">
+              <div className="flex items-center space-x-2 text-blue-400 font-semibold text-xs">
+                <span className="flex items-center justify-center w-5 h-5 rounded-full bg-blue-500/10 border border-blue-500/30 text-[10px] font-bold">1</span>
+                <span>How it works:</span>
+              </div>
+              <ol className="list-decimal list-inside space-y-1.5 text-slate-300 pl-1 leading-relaxed">
+                <li>Click the <strong className="text-white">Copy Prompt</strong> button below.</li>
+                <li>Go to <a href="https://chatgpt.com" target="_blank" rel="noreferrer" className="text-blue-400 hover:underline font-semibold inline-flex items-center gap-0.5">ChatGPT <ArrowRight className="h-3 w-3" /></a> (or Claude) and upload your timetable image/PDF.</li>
+                <li>Paste the copied prompt and send it to get the structured timetable text output.</li>
+                <li>Switch to the <strong className="text-white">"2. Paste & Scan Timetable"</strong> tab here, paste GPT's response, and load it instantly!</li>
+              </ol>
+            </div>
+
+            <div className="bg-[#07090E] border border-slate-800 rounded-xl p-4 space-y-3 relative">
+              <div className="flex justify-between items-center pb-2 border-b border-white/5">
+                <span className="font-mono text-[10px] text-slate-500 uppercase tracking-wider">Optimized ChatGPT/Claude Prompt</span>
+                <button
+                  type="button"
+                  onClick={handleCopyPrompt}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold tracking-tight transition duration-150 flex items-center gap-1.5 cursor-pointer ${
+                    promptCopied
+                      ? 'bg-emerald-600 text-white'
+                      : 'bg-blue-600 hover:bg-blue-500 text-white shadow-md shadow-blue-500/10'
+                  }`}
+                >
+                  {promptCopied ? (
+                    <>
+                      <CheckCircle2 className="h-3.5 w-3.5" />
+                      Copied Prompt!
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="h-3.5 w-3.5" />
+                      Copy Prompt
+                    </>
+                  )}
+                </button>
+              </div>
+              <div className="max-h-48 overflow-y-auto pr-1">
+                <pre className="font-mono text-[11px] text-slate-300 leading-relaxed whitespace-pre-wrap select-all selection:bg-blue-500/30">
+                  {gptPromptText}
+                </pre>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Option 2: Paste & Scan Timetable View */}
+        {!importedData && !aiLoading && importMode === 'scan' && (
+          <div className="mt-5 relative z-10 space-y-4 font-sans">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="md:col-span-2 space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-semibold text-slate-300">Paste GPT Structured Output</label>
+                  <span className="text-[10px] text-slate-500 font-mono">Format: Subject_Code: Full Name</span>
+                </div>
+                <textarea
+                  value={rawText}
+                  onChange={(e) => setRawText(e.target.value)}
+                  className="w-full h-56 bg-[#07090E] border border-slate-800 rounded-xl p-3 text-xs font-mono text-slate-200 focus:outline-none focus:ring-1 focus:ring-blue-500 resize-none selection:bg-blue-500/30"
+                  placeholder="Define your Subjects first..."
+                />
               </div>
 
-              <div className="space-y-1 text-center">
-                <p className="text-xs font-sans font-semibold text-slate-200">
-                  Drag & drop your file here, or <span className="text-blue-400 underline decoration-dotted">browse files</span>
-                </p>
-                <p className="text-[10px] text-slate-500 font-mono">
-                  Supports Images (PNG, JPEG, screenshot) or Syllabus Documents (PDF) up to 14MB
-                </p>
+              <div className="space-y-3 bg-[#0c1018]/60 p-4 border border-slate-800/80 rounded-xl flex flex-col justify-between">
+                <div className="space-y-2">
+                  <span className="block text-xs font-bold text-white flex items-center gap-1.5">
+                    <FileSpreadsheet className="h-4 w-4 text-blue-400" />
+                    Syntax & Validation Rules
+                  </span>
+                  <ul className="text-[11px] text-slate-400 space-y-1.5 leading-relaxed list-disc list-inside">
+                    <li>Use <code className="text-blue-300 font-mono">CODE: Full Name</code> to define.</li>
+                    <li>Use <code className="text-indigo-300 font-mono">isLab: true, labHours: 3</code> inside parentheses for practicals.</li>
+                    <li>Specify classes like <code className="text-emerald-300 font-mono">Monday: OS(1h), DBMS(1h)</code>.</li>
+                    <li>Days are parsed automatically in real-time.</li>
+                  </ul>
+                </div>
+
+                <div className="text-[10px] text-slate-500 bg-slate-950/40 p-2.5 rounded border border-white/5 font-mono leading-normal">
+                  💡 Hint: Adding hours suffix like <code className="text-white">DBMS(1h)</code> locks the class duration.
+                </div>
               </div>
+            </div>
+
+            <div className="flex justify-end gap-2.5">
+              <button
+                type="button"
+                onClick={() => {
+                  setRawText(
+                    `# Define your Subjects first (FORMAT -> CODE: Full Name)\n` +
+                    `DBMS: Database Management Systems\n` +
+                    `OS: Operating Systems\n` +
+                    `DBMS_LAB: DBMS Lab (isLab: true)\n` +
+                    `OS_LAB: Operating Systems Lab (isLab: true, labHours: 3)\n\n` +
+                    `# Specify daily class slots (FORMAT -> Day: CODE, CODE, ...)\n` +
+                    `Monday: DBMS, OS, DBMS_LAB\n` +
+                    `Tuesday: OS(1h), DBMS(1h)\n` +
+                    `Wednesday: DBMS, OS_LAB(3h)\n` +
+                    `Thursday: DBMS(1h), OS(1h)\n` +
+                    `Friday: OS(1h), DBMS_LAB(3h)`
+                  );
+                }}
+                className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-semibold tracking-tight transition cursor-pointer"
+              >
+                Reset Template
+              </button>
+              <button
+                type="button"
+                onClick={handleTextImport}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold tracking-tight transition shadow-lg shadow-blue-500/10 cursor-pointer flex items-center gap-1.5"
+              >
+                <Sparkles className="h-3.5 w-3.5" />
+                Scan & Load Timetable
+              </button>
             </div>
 
             {aiError && (
               <div className="mt-4 flex items-start space-x-2.5 p-3 bg-red-950/20 border border-red-900/30 text-red-400 text-xs rounded-lg animate-fadeIn">
                 <AlertCircle className="h-4.5 w-4.5 shrink-0 mt-0.5" />
                 <div className="space-y-1">
-                  <p className="font-semibold text-red-300">Analysis aborted</p>
+                  <p className="font-semibold text-red-300">Parsing failed</p>
                   <p className="text-red-400/90 leading-relaxed font-sans">{aiError}</p>
                 </div>
               </div>
@@ -456,7 +1006,9 @@ export default function TimetableManager({
               <Sparkles className="h-4 w-4 text-indigo-400 absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 animate-pulse" />
             </div>
             <div className="space-y-1.5 text-center">
-              <p className="text-xs font-semibold text-slate-200">Processing Timetable via Gemini Intel...</p>
+              <p className="text-xs font-semibold text-slate-200">
+                {scanEngine === 'local' ? 'Extracting Timetable Offline...' : 'Processing Timetable via Gemini Intel...'}
+              </p>
               <p className="text-[11px] font-mono text-blue-400 max-w-md animate-pulse leading-normal font-medium bg-blue-500/5 px-3 py-1.5 rounded-lg border border-blue-500/10">
                 {aiLoadingStep}
               </p>
@@ -790,39 +1342,173 @@ export default function TimetableManager({
         </div>
 
         {/* Current Timetable Slots Display */}
-        <div className="space-y-2 min-h-60">
+        <div className="space-y-3 min-h-60">
+          <div className="flex items-center justify-between text-[10.5px] text-slate-400 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-100">
+            <span>💡 Double-click a card or click the edit icon to modify subjects or hours.</span>
+          </div>
+
           {(!latestTimetable || !latestTimetable.slots[activeDayTab] || latestTimetable.slots[activeDayTab].length === 0) ? (
             <div className="text-center py-10 space-y-2 text-slate-400">
               <Clock className="h-8 w-8 mx-auto" />
               <p className="text-xs italic">No scheduled class slots recorded for {dayNames[activeDayTab]}.</p>
               <p className="text-[10px]">Mark as "Holiday" or adjust timetable properties.</p>
+              
+              {latestTimetable && (
+                <div className="pt-2">
+                  <button
+                    onClick={handleAddSlotToActiveDay}
+                    className="inline-flex items-center space-x-1 px-3 py-1 bg-slate-900 hover:bg-slate-800 text-white rounded text-xs transition cursor-pointer"
+                  >
+                    <Plus className="h-3 w-3" />
+                    <span>Create First Slot</span>
+                  </button>
+                </div>
+              )}
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
-              {latestTimetable.slots[activeDayTab].map((slot, i) => {
-                const sObj = subjects.find(s => s.code === slot.subjectCode);
-                return (
-                  <div key={i} className="flex justify-between items-center p-3 rounded-lg border border-slate-100 bg-slate-50/50 hover:bg-slate-50 transition">
-                    <div className="space-y-1">
-                      <div className="flex items-center space-x-2">
-                        <span className={`h-2 w-2 rounded-full ${sObj?.isLab ? 'bg-indigo-500' : 'bg-slate-600'}`} />
-                        <span className="font-mono font-bold text-xs text-slate-900 tracking-wide uppercase">
-                          {slot.subjectCode}
-                        </span>
-                      </div>
-                      <p className="text-[10.5px] text-slate-400 font-sans truncate max-w-[200px]">
-                        {sObj?.name || 'Academic Class'}
-                      </p>
-                    </div>
+            <div className="space-y-3 pt-1">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {latestTimetable.slots[activeDayTab].map((slot, i) => {
+                  const sObj = subjects.find(s => s.code === slot.subjectCode);
+                  
+                  if (editingSlotKey && editingSlotKey.day === activeDayTab && editingSlotKey.index === i) {
+                    return (
+                      <div key={i} className="p-3.5 rounded-xl border border-blue-200 bg-blue-50/15 shadow-inner space-y-2.5 col-span-1 md:col-span-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] uppercase font-mono font-bold text-blue-600">Editing Slot #{i + 1}</span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const updatedSlots = { ...latestTimetable.slots };
+                              const daySlots = [...(updatedSlots[activeDayTab] || [])];
+                              daySlots.splice(i, 1);
+                              updatedSlots[activeDayTab] = daySlots;
+                              onReplaceTimetable({
+                                ...latestTimetable,
+                                slots: updatedSlots
+                              });
+                              setEditingSlotKey(null);
+                            }}
+                            className="text-[10px] font-semibold text-red-500 hover:text-red-700 flex items-center gap-1 cursor-pointer"
+                            title="Remove slot"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                            <span>Delete Slot</span>
+                          </button>
+                        </div>
+                        
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          <div className="space-y-1">
+                            <label className="block text-[9px] uppercase font-mono font-bold text-slate-400">Subject Code</label>
+                            <input
+                              type="text"
+                              list={`subj-opts-${i}`}
+                              value={editingSlotForm.subjectCode}
+                              onChange={(e) => setEditingSlotForm(prev => ({ ...prev, subjectCode: e.target.value.toUpperCase() }))}
+                              className="w-full text-xs font-mono border border-slate-300 rounded p-1.5 bg-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 text-slate-800"
+                              placeholder="e.g. DBMS"
+                            />
+                            <datalist id={`subj-opts-${i}`}>
+                              {subjects.map(s => <option key={s.code} value={s.code}>{s.name}</option>)}
+                            </datalist>
+                          </div>
 
-                    <div className="text-right">
-                      <span className="text-xs font-mono font-bold text-slate-700 bg-white border px-2 py-0.5 rounded">
-                        {slot.hours} Hours
-                      </span>
+                          <div className="space-y-1">
+                            <label className="block text-[9px] uppercase font-mono font-bold text-slate-400">Hours Duration</label>
+                            <input
+                              type="number"
+                              min="1"
+                              max="8"
+                              value={editingSlotForm.hours}
+                              onChange={(e) => setEditingSlotForm(prev => ({ ...prev, hours: parseInt(e.target.value) || 1 }))}
+                              className="w-full text-xs font-mono border border-slate-300 rounded p-1.5 bg-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 text-slate-800"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="flex justify-end space-x-1.5 pt-1.5 border-t border-slate-100">
+                          <button
+                            type="button"
+                            onClick={() => setEditingSlotKey(null)}
+                            className="px-2.5 py-1 border border-slate-200 text-slate-500 rounded bg-white hover:bg-slate-50 cursor-pointer text-[10px] font-semibold"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const updatedSlots = { ...latestTimetable.slots };
+                              const daySlots = [...(updatedSlots[activeDayTab] || [])];
+                              if (daySlots[i]) {
+                                daySlots[i] = {
+                                  subjectCode: editingSlotForm.subjectCode.trim().toUpperCase(),
+                                  hours: Number(editingSlotForm.hours) || 1
+                                };
+                              }
+                              updatedSlots[activeDayTab] = daySlots;
+                              onReplaceTimetable({
+                                ...latestTimetable,
+                                slots: updatedSlots
+                              });
+                              setEditingSlotKey(null);
+                            }}
+                            className="px-3.5 py-1 bg-blue-600 hover:bg-blue-500 text-white rounded cursor-pointer text-[10px] font-bold shadow-xs"
+                          >
+                            Save Changes
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div 
+                      key={i} 
+                      onDoubleClick={() => handleStartEditSlot(activeDayTab, i, slot)}
+                      className="flex justify-between items-center p-3 rounded-lg border border-slate-100 bg-slate-50/50 hover:bg-slate-50 hover:border-blue-200 transition group relative cursor-pointer"
+                      title="Double-click to edit slot"
+                    >
+                      <div className="space-y-1">
+                        <div className="flex items-center space-x-2">
+                          <span className={`h-2 w-2 rounded-full ${sObj?.isLab ? 'bg-indigo-500' : 'bg-slate-600'}`} />
+                          <span className="font-mono font-bold text-xs text-slate-900 tracking-wide uppercase">
+                            {slot.subjectCode}
+                          </span>
+                        </div>
+                        <p className="text-[10.5px] text-slate-400 font-sans truncate max-w-[200px]">
+                          {sObj?.name || 'Academic Class'}
+                        </p>
+                      </div>
+
+                      <div className="flex items-center space-x-2 text-right">
+                        <span className="text-xs font-mono font-bold text-slate-700 bg-white border px-2 py-0.5 rounded">
+                          {slot.hours} Hours
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => handleStartEditSlot(activeDayTab, i, slot)}
+                          className="p-1 text-slate-300 hover:text-blue-600 hover:bg-slate-100 rounded transition opacity-0 group-hover:opacity-100 cursor-pointer"
+                          title="Edit this slot"
+                        >
+                          <Pencil className="h-3 w-3" />
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                );
-              })}
+                  );
+                })}
+              </div>
+
+              {latestTimetable && (
+                <div className="flex justify-center pt-2 border-t border-slate-100">
+                  <button
+                    onClick={handleAddSlotToActiveDay}
+                    className="inline-flex items-center space-x-1.5 px-4 py-2 border border-slate-200 hover:bg-slate-50 text-slate-700 font-semibold rounded-lg text-xs transition cursor-pointer shadow-xs"
+                  >
+                    <Plus className="h-4 w-4 text-slate-500" />
+                    <span>Add Class Slot to {dayNames[activeDayTab]}</span>
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </div>
