@@ -392,7 +392,7 @@ export default function SettingsTab({
             </div>
 
             <div className="space-y-2 text-left">
-              <label className="block text-[11px] font-bold text-slate-350">
+              <label className="block text-[11px] font-bold text-slate-400">
                 Update Student Photo File
               </label>
               <input

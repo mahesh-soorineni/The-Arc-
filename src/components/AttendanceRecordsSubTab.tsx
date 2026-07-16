@@ -815,18 +815,18 @@ export default function AttendanceRecordsSubTab({
                 className={`p-3.5 text-left rounded-xl border text-xs transition relative flex flex-col justify-between cursor-pointer ${
                   reportMode === col.id
                     ? 'bg-blue-600/10 border-blue-500 text-white shadow-md shadow-blue-600/5'
-                    : 'bg-white/[0.02] hover:bg-white/[0.05] border-white/5 text-slate-350'
+                    : 'bg-white/[0.02] hover:bg-white/[0.05] border-white/5 text-slate-400 dark:text-slate-300'
                 }`}
               >
                 <div className="flex items-center justify-between w-full">
                   <span className="font-bold">{col.title}</span>
                   <div className={`w-3.5 h-3.5 rounded-full border flex items-center justify-center ${
-                    reportMode === col.id ? 'border-blue-400 bg-blue-500' : 'border-slate-600'
+                    reportMode === col.id ? 'border-blue-400 bg-blue-500' : 'border-slate-500 dark:border-slate-600'
                   }`}>
                     {reportMode === col.id && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
                   </div>
                 </div>
-                <span className="text-[10px] text-slate-450 mt-1.5 block">
+                <span className="text-[10px] text-slate-500 dark:text-slate-400 mt-1.5 block">
                   {col.desc}
                 </span>
               </button>
@@ -846,7 +846,7 @@ export default function AttendanceRecordsSubTab({
             {reportMode === 'monthly' && (
               <div className="grid grid-cols-2 gap-2.5">
                 <div className="space-y-1">
-                  <span className="text-[10px] font-mono text-slate-450 block">Selected Month:</span>
+                  <span className="text-[10px] font-mono text-slate-500 dark:text-slate-400 block">Selected Month:</span>
                   <div className="relative">
                     <select
                       value={selectedMonth}
@@ -875,7 +875,7 @@ export default function AttendanceRecordsSubTab({
                 </div>
 
                 <div className="space-y-1">
-                  <span className="text-[10px] font-mono text-slate-450 block">Selected Year:</span>
+                  <span className="text-[10px] font-mono text-slate-500 dark:text-slate-400 block">Selected Year:</span>
                   <div className="relative">
                     <select
                       value={selectedYear}
@@ -895,7 +895,7 @@ export default function AttendanceRecordsSubTab({
             {reportMode === 'custom' && (
               <div className="grid grid-cols-2 gap-2.5">
                 <div className="space-y-1">
-                  <span className="text-[10px] font-mono text-slate-450 block">From Date:</span>
+                  <span className="text-[10px] font-mono text-slate-500 dark:text-slate-400 block">From Date:</span>
                   <input
                     type="date"
                     value={fromDate}
@@ -905,7 +905,7 @@ export default function AttendanceRecordsSubTab({
                 </div>
 
                 <div className="space-y-1">
-                  <span className="text-[10px] font-mono text-slate-450 block">To Date:</span>
+                  <span className="text-[10px] font-mono text-slate-500 dark:text-slate-400 block">To Date:</span>
                   <input
                     type="date"
                     value={toDate}
@@ -928,11 +928,11 @@ export default function AttendanceRecordsSubTab({
             {/* Checkbox tool to filter inactive subjects */}
             <div className="flex items-center md:pl-4">
               <label 
-                className="flex items-center space-x-3 text-xs text-slate-350 cursor-pointer select-none group w-full"
+                className="flex items-center space-x-3 text-xs text-slate-400 dark:text-slate-300 cursor-pointer select-none group w-full"
                 onClick={() => setExcludeInactive(!excludeInactive)}
               >
                 <div className={`w-4.5 h-4.5 rounded border flex items-center justify-center transition shrink-0 ${
-                  excludeInactive ? 'bg-blue-600 border-blue-500 text-white' : 'border-slate-650 bg-transparent group-hover:border-slate-500'
+                  excludeInactive ? 'bg-blue-600 border-blue-500 text-white' : 'border-slate-500 dark:border-slate-600 bg-transparent group-hover:border-slate-400'
                 }`}>
                   {excludeInactive && <Check className="h-3 w-3" />}
                 </div>
@@ -950,7 +950,7 @@ export default function AttendanceRecordsSubTab({
 
         {/* Step 3: Trigger Button */}
         <div className="flex items-center justify-between pt-2 border-t border-white/5">
-          <p className="text-[10px] text-slate-450 font-mono">
+          <p className="text-[10px] text-slate-400 dark:text-slate-400 font-mono">
             * Selected Period: {reportMode.toUpperCase()} | Excluding Inactives: {excludeInactive ? 'YES' : 'NO'}
           </p>
           <button
@@ -1135,7 +1135,7 @@ export default function AttendanceRecordsSubTab({
                 <div className="overflow-x-auto -mx-3.5 sm:mx-0 border border-slate-200 sm:border-none rounded-lg">
                   <table className="w-full border-collapse text-xs text-left">
                     <thead>
-                      <tr className="bg-slate-100 text-slate-705 font-bold border border-slate-350">
+                      <tr className="bg-slate-100 text-slate-700 font-bold border border-slate-300">
                         <th className="p-1.5 sm:p-2.5 border border-slate-300 text-center w-8 sm:w-12 font-bold select-none text-[9px] sm:text-[11px] uppercase">Sl.No.</th>
                         <th className="p-1.5 sm:p-2.5 border border-slate-300 font-bold text-[9px] sm:text-[11px] uppercase">Subjects</th>
                         <th className="p-1.5 sm:p-2.5 border border-slate-300 text-center w-12 sm:w-16 font-bold text-[9px] sm:text-[11px] uppercase">Held</th>
@@ -1175,7 +1175,7 @@ export default function AttendanceRecordsSubTab({
                         );
                       })}
                       {/* TABLE CUMULATIVE STATS FOOTER */}
-                      <tr className="bg-slate-50 font-bold border-2 border-slate-350">
+                      <tr className="bg-slate-50 font-bold border-2 border-slate-300">
                         <td colSpan={2} className="p-1.5 sm:p-2.5 border border-slate-300 text-right text-slate-800 pr-2 sm:pr-4 uppercase font-bold text-[8.5px] sm:text-[10px] tracking-wide">
                           <span className="hidden sm:inline">Cumulative </span>Total
                         </td>
@@ -1363,7 +1363,7 @@ export default function AttendanceRecordsSubTab({
                                 </button>
                                 <button
                                   onClick={handleCancelEdit}
-                                  className="bg-slate-800 hover:bg-slate-700 text-slate-350 font-bold text-[10px] px-2.5 py-1 rounded inline-flex items-center space-x-1 cursor-pointer transition font-mono uppercase"
+                                  className="bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-[10px] px-2.5 py-1 rounded inline-flex items-center space-x-1 cursor-pointer transition font-mono uppercase"
                                 >
                                   Cancel
                                 </button>

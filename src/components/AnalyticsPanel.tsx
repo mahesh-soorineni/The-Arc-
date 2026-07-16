@@ -466,7 +466,7 @@ export default function AnalyticsPanel({
                     {/* Dynamic Bunk Prediction for this Subject */}
                     <div className="pt-2 border-t border-slate-100/50 flex flex-col space-y-1">
                       <div className="flex items-center justify-between text-[11px]">
-                        <span className="text-slate-450 flex items-center space-x-1">
+                        <span className="text-slate-400 flex items-center space-x-1">
                           <Clock className="h-3.5 w-3.5 text-slate-400" />
                           <span>Semester Leftover: <b className="font-mono font-bold text-slate-700">{subRemaining} hr</b></span>
                         </span>

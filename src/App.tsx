@@ -1129,13 +1129,26 @@ export default function App() {
     semesterStartDate?: string;
     semesterEndDate?: string;
   }) => {
-    // 1. Update user profile with semester dates
+    // 1. Update user profile safely, avoiding overwriting existing non-placeholder values with generic placeholder strings
+    const isPlaceholderCollege = (name?: string) => !name || name.trim() === '' || name === 'My University / College' || name === 'University / College';
+    const isPlaceholderDegree = (deg?: string) => !deg || deg.trim() === '' || deg === 'Degree Program';
+    const isPlaceholderBranch = (br?: string) => !br || br.trim() === '' || br === 'General' || br === 'Computer Science';
+    const isPlaceholderSemester = (sem?: string) => !sem || sem.trim() === '' || sem === 'Current Semester';
+
     const updatedProfile = {
       ...userProfile,
-      collegeName: imported.collegeName,
-      degree: imported.degree,
-      branch: imported.branch,
-      semester: imported.semester,
+      collegeName: !isPlaceholderCollege(imported.collegeName) 
+        ? imported.collegeName 
+        : (userProfile.collegeName && !isPlaceholderCollege(userProfile.collegeName) ? userProfile.collegeName : imported.collegeName),
+      degree: !isPlaceholderDegree(imported.degree) 
+        ? imported.degree 
+        : (userProfile.degree && !isPlaceholderDegree(userProfile.degree) ? userProfile.degree : imported.degree),
+      branch: !isPlaceholderBranch(imported.branch) 
+        ? imported.branch 
+        : (userProfile.branch && !isPlaceholderBranch(userProfile.branch) ? userProfile.branch : imported.branch),
+      semester: !isPlaceholderSemester(imported.semester) 
+        ? imported.semester 
+        : (userProfile.semester && !isPlaceholderSemester(userProfile.semester) ? userProfile.semester : imported.semester),
       semesterStartDate: imported.semesterStartDate || userProfile.semesterStartDate || '2026-05-01',
       semesterEndDate: imported.semesterEndDate || userProfile.semesterEndDate || '2026-11-30',
     };
@@ -1730,7 +1743,7 @@ export default function App() {
         <div className="flex-1 p-2.5 sm:p-4 md:p-8 overflow-y-auto space-y-4 sm:space-y-6">
           
           {/* Print Headers */}
-          <div id="print-layout-headers" className="hidden print:block space-y-3 pb-4 border-b border-slate-350">
+          <div id="print-layout-headers" className="hidden print:block space-y-3 pb-4 border-b border-slate-300">
             <div className="flex justify-between items-center">
               <div>
                 <h2 className="text-xl font-extrabold text-slate-900 tracking-tight">The Arc: Semester Attendance Report</h2>
@@ -1971,12 +1984,12 @@ export default function App() {
               <table className="w-full text-left border-collapse border border-slate-300">
                 <thead>
                   <tr className="bg-slate-100 uppercase text-[9px] border-b border-slate-300">
-                    <th className="p-2 border border-slate-350">Date</th>
-                    <th className="p-2 border border-slate-350">Day</th>
-                    <th className="p-2 border border-slate-350">Classification</th>
-                    <th className="p-2 border border-slate-350 text-center">Scheduled Hour</th>
-                    <th className="p-2 border border-slate-350 text-center">Attended Hour</th>
-                    <th className="p-2 border border-slate-350">Skipped Courses</th>
+                    <th className="p-2 border border-slate-300">Date</th>
+                    <th className="p-2 border border-slate-300">Day</th>
+                    <th className="p-2 border border-slate-300">Classification</th>
+                    <th className="p-2 border border-slate-300 text-center">Scheduled Hour</th>
+                    <th className="p-2 border border-slate-300 text-center">Attended Hour</th>
+                    <th className="p-2 border border-slate-300">Skipped Courses</th>
                   </tr>
                 </thead>
                 <tbody>

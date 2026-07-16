@@ -378,18 +378,18 @@ export default function AttendanceReportsSubTab({
                 className={`p-3 text-left rounded-xl border text-xs transition relative flex flex-col justify-between cursor-pointer ${
                   reportMode === col.id
                     ? 'bg-blue-600/10 border-blue-500 text-white shadow-md shadow-blue-600/5'
-                    : 'bg-white/[0.01] hover:bg-white/[0.04] border-white/5 text-slate-350'
+                    : 'bg-white/[0.01] hover:bg-white/[0.04] border-white/5 text-slate-400 dark:text-slate-300'
                 }`}
               >
                 <div className="flex items-center justify-between w-full">
                   <span className="font-bold">{col.title}</span>
                   <div className={`w-3.5 h-3.5 rounded-full border flex items-center justify-center ${
-                    reportMode === col.id ? 'border-blue-400 bg-blue-500' : 'border-slate-650'
+                    reportMode === col.id ? 'border-blue-400 bg-blue-500' : 'border-slate-500 dark:border-slate-600'
                   }`}>
                     {reportMode === col.id && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
                   </div>
                 </div>
-                <span className="text-[10px] text-slate-500 mt-1 block">
+                <span className="text-[10px] text-slate-500 dark:text-slate-400 mt-1 block">
                   {col.desc}
                 </span>
               </button>
@@ -491,11 +491,11 @@ export default function AttendanceReportsSubTab({
             {/* Checkbox tool to filter inactive subjects */}
             <div className="flex items-center md:pl-4">
               <label 
-                className="flex items-center space-x-3 text-xs text-slate-350 cursor-pointer select-none group w-full"
+                className="flex items-center space-x-3 text-xs text-slate-400 dark:text-slate-300 cursor-pointer select-none group w-full"
                 onClick={() => setExcludeInactive(!excludeInactive)}
               >
                 <div className={`w-4.5 h-4.5 rounded border flex items-center justify-center transition shrink-0 ${
-                  excludeInactive ? 'bg-blue-600 border-blue-500 text-white' : 'border-slate-600 bg-transparent group-hover:border-slate-500'
+                  excludeInactive ? 'bg-blue-600 border-blue-500 text-white' : 'border-slate-500 dark:border-slate-600 bg-transparent group-hover:border-slate-400'
                 }`}>
                   {excludeInactive && <Check className="h-3 w-3" />}
                 </div>
@@ -689,9 +689,9 @@ export default function AttendanceReportsSubTab({
                       const value = getCellAttendanceStatus(sub.code, date);
                       
                       // Compute special styling based on content
-                      let cellStyle = 'text-slate-650 font-medium';
+                      let cellStyle = 'text-slate-400 dark:text-slate-500 font-medium';
                       if (value.includes('P')) {
-                        cellStyle = 'text-emerald-450 font-black bg-emerald-500/[0.02] border-r border-white/[0.015]';
+                        cellStyle = 'text-emerald-500 dark:text-emerald-400 font-black bg-emerald-500/[0.02] border-r border-white/[0.015]';
                       } else if (value.includes('A')) {
                         cellStyle = 'text-red-500 font-black bg-red-500/[0.02] border-r border-white/[0.015]';
                       }

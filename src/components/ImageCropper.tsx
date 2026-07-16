@@ -311,7 +311,7 @@ export const ImageCropper: React.FC<ImageCropperProps> = ({
             </div>
 
             {/* Micro Interaction Drag Action Tip */}
-            <div className="absolute bottom-2 left-1/2 -translate-x-1/2 pointer-events-none z-10 bg-black/70 backdrop-blur-xs text-[7px] text-slate-350 uppercase tracking-widest px-2.5 py-0.5 rounded-full flex items-center gap-1">
+            <div className="absolute bottom-2 left-1/2 -translate-x-1/2 pointer-events-none z-10 bg-black/70 backdrop-blur-xs text-[7px] text-slate-300 uppercase tracking-widest px-2.5 py-0.5 rounded-full flex items-center gap-1">
               <Move className="w-2 h-2 text-amber-500" /> Align & Scale Portrait
             </div>
 

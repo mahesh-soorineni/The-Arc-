@@ -531,8 +531,16 @@ export function formatDateObjToDDMMYYYY(date: Date): string {
  * Dynamic Portal Context generation from Student Profile
  */
 export function formatPortalContext(degree?: string, semester?: string): string {
-  const d = (degree || 'B.Tech').trim();
+  let d = (degree || 'B.Tech').trim();
   let s = (semester || 'VI').trim();
+
+  // Sanitize temporary/fallback OCR placeholder texts
+  if (d === 'Degree Program') {
+    d = 'B.Tech';
+  }
+  if (s === 'Current Semester' || s === 'Current') {
+    s = 'VI';
+  }
   
   // Normalize and clean "Semester" / "Sem" out of the semester string to avoid duplication.
   s = s
