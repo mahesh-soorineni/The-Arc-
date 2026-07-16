@@ -1,9 +1,26 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:ital,wght@0,300..900;1,300..900&family=Space+Grotesk:wght@300..700&family=JetBrains+Mono:ital,wght@0,100..800;1,100..800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,200..800;1,200..800&family=Outfit:wght@100..900&family=Fira+Code:wght@300..700&display=swap');
 @import "tailwindcss";
 
 @theme {
-  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
-  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+  --font-sans: "Plus Jakarta Sans", "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Outfit", sans-serif;
+  --font-mono: "Fira Code", ui-monospace, SFMono-Regular, monospace;
+
+  /* Overriding Tailwind blue palette with Electric Amethyst Violet color palette */
+  --color-blue-50: #f5f3ff;
+  --color-blue-100: #ede9fe;
+  --color-blue-200: #ddd6fe;
+  --color-blue-300: #c084fc;
+  --color-blue-400: #a78bfa;
+  --color-blue-500: #8b5cf6;
+  --color-blue-600: #7c3aed;
+  --color-blue-700: #6d28d9;
+  --color-blue-800: #5b21b6;
+  --color-blue-900: #4c1d95;
+  --color-blue-950: #2e1065;
+  
+  /* Overriding standard border colors for clean dark appearance */
+  --color-border-slate-200: rgba(255, 255, 255, 0.05);
 }
 
 /* Elegant sleek scrollbar style */
@@ -11,56 +28,39 @@
   width: 6px;
   height: 6px;
 }
-html.dark ::-webkit-scrollbar-track {
-  background: #0A0C10;
+html.dark ::-webkit-scrollbar-track, ::-webkit-scrollbar-track {
+  background: #030307;
 }
-html:not(.dark) ::-webkit-scrollbar-track {
-  background: #F1F5F9;
-}
-html.dark ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.1);
+html.dark ::-webkit-scrollbar-thumb, ::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.08);
   border-radius: 3px;
 }
-html:not(.dark) ::-webkit-scrollbar-thumb {
-  background: rgba(15, 23, 42, 0.1);
-  border-radius: 3px;
+html.dark ::-webkit-scrollbar-thumb:hover, ::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.15);
 }
-html.dark ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.2);
-}
-html:not(.dark) ::-webkit-scrollbar-thumb:hover {
-  background: rgba(15, 23, 42, 0.2);
+
+/* Typography Headings Strategy */
+h1, h2, h3, h4, h5, h6, .font-display {
+  font-family: "Outfit", "Plus Jakarta Sans", sans-serif !important;
+  letter-spacing: -0.02em;
 }
 
 /* Sleek Interface global styles */
 body {
-  font-family: "Inter", sans-serif;
+  font-family: "Plus Jakarta Sans", sans-serif;
+  background-color: #030307 !important;
+  color: #E2E8F0 !important;
   transition: background-color 0.2s ease, color 0.2s ease;
 }
 
-html.dark body {
-  background-color: #0A0C10 !important;
-  color: #E2E8F0 !important;
+.the-arc-body {
+  background-color: #030307 !important;
 }
 
-html:not(.dark) body {
-  background-color: #F8FAFC !important;
-  color: #0F172A !important;
-}
-
-/* Skin generic Tailwind light classes to match "The Arc" Sleek Dark theme perfectly */
-
-html.dark .the-arc-body {
-  background-color: #0A0C10 !important;
-}
-
-html:not(.dark) .the-arc-body {
-  background-color: #F8FAFC !important;
-}
-
-/* Any white background container becomes #0D1117 (Sleek card color) */
-html.dark .the-arc-body .bg-white {
-  background-color: #0D1117 !important;
+/* All white background container/cards become #090911 (Obsidian Velvet Card Color) */
+html.dark .the-arc-body .bg-white,
+.the-arc-body .bg-white {
+  background-color: #090911 !important;
   border-color: rgba(255, 255, 255, 0.05) !important;
   color: #E2E8F0 !important;
 }
@@ -74,7 +74,13 @@ html.dark .the-arc-body .bg-slate-100\/30,
 html.dark .the-arc-body .bg-slate-50\/50,
 html.dark .the-arc-body .bg-slate-50\/30,
 html.dark .the-arc-body .bg-indigo-50,
-html.dark .the-arc-body .bg-indigo-50\/50 {
+html.dark .the-arc-body .bg-indigo-50\/50,
+.the-arc-body .bg-slate-50,
+.the-arc-body .bg-slate-100,
+.the-arc-body .bg-slate-100\/70,
+.the-arc-body .bg-slate-100\/50,
+.the-arc-body .bg-slate-50\/50,
+.the-arc-body .bg-indigo-50 {
   background-color: rgba(255, 255, 255, 0.03) !important;
   color: #E2E8F0 !important;
   border-color: rgba(255, 255, 255, 0.05) !important;
@@ -83,27 +89,34 @@ html.dark .the-arc-body .bg-indigo-50\/50 {
 /* Input boxes, textareas and selections */
 html.dark .the-arc-body input,
 html.dark .the-arc-body select,
-html.dark .the-arc-body textarea {
-  background-color: #0A0C10 !important;
-  border-color: rgba(255, 255, 255, 0.1) !important;
+html.dark .the-arc-body textarea,
+.the-arc-body input,
+.the-arc-body select,
+.the-arc-body textarea {
+  background-color: #05050A !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
   color: #FFFFFF !important;
 }
 
 html.dark .the-arc-body input:focus,
 html.dark .the-arc-body select:focus,
-html.dark .the-arc-body textarea:focus {
-  border-color: #2563EB !important;
+html.dark .the-arc-body textarea:focus,
+.the-arc-body input:focus,
+.the-arc-body select:focus,
+.the-arc-body textarea:focus {
+  border-color: #7C3AED !important; /* Electric violet */
   outline: none !important;
-  box-ring: 1px #2563EB !important;
+  box-shadow: 0 0 0 1px #7C3AED !important;
 }
 
 /* Text selections & scroll overrides */
-html.dark .the-arc-body ::selection {
-  background-color: rgba(37, 99, 235, 0.3) !important;
+html.dark .the-arc-body ::selection,
+.the-arc-body ::selection {
+  background-color: rgba(124, 58, 237, 0.3) !important; /* Violet selection overlay */
   color: #FFFFFF !important;
 }
 
-/* Override borders */
+/* Override borders to ultra thin, dark obsidian lines */
 html.dark .the-arc-body .border-slate-100,
 html.dark .the-arc-body .border-slate-200,
 html.dark .the-arc-body .border-slate-300,
@@ -114,7 +127,12 @@ html.dark .the-arc-body .border-b,
 html.dark .the-arc-body .border-t,
 html.dark .the-arc-body .border-r,
 html.dark .the-arc-body .border-l,
-html.dark .the-arc-body .divide-y > * {
+html.dark .the-arc-body .divide-y > *,
+.the-arc-body .border-slate-100,
+.the-arc-body .border-slate-200,
+.the-arc-body .border-b,
+.the-arc-body .border-t,
+.the-arc-body .divide-y > * {
   border-color: rgba(255, 255, 255, 0.05) !important;
 }
 
@@ -125,97 +143,114 @@ html.dark .the-arc-body .text-slate-850,
 html.dark .the-arc-body .text-slate-800,
 html.dark .the-arc-body .text-slate-700,
 html.dark .the-arc-body .text-indigo-950,
-html.dark .the-arc-body .text-indigo-900 {
+html.dark .the-arc-body .text-indigo-900,
+.the-arc-body .text-slate-900,
+.the-arc-body .text-slate-800,
+.the-arc-body .text-slate-700 {
   color: #FFFFFF !important;
 }
 
 html.dark .the-arc-body .text-slate-600,
-html.dark .the-arc-body .text-slate-500 {
+html.dark .the-arc-body .text-slate-500,
+.the-arc-body .text-slate-600,
+.the-arc-body .text-slate-500 {
   color: #94A3B8 !important;
 }
 
 html.dark .the-arc-body .text-indigo-600,
-html.dark .the-arc-body .text-indigo-705 {
-  color: #60A5FA !important;
+html.dark .the-arc-body .text-indigo-705,
+.the-arc-body .text-indigo-600,
+.the-arc-body .text-indigo-705 {
+  color: #A78BFA !important; /* Electric violet text */
 }
 
 html.dark .the-arc-body .text-slate-450,
-html.dark .the-arc-body .text-slate-400 {
+html.dark .the-arc-body .text-slate-400,
+.the-arc-body .text-slate-400 {
   color: #64748B !important;
 }
 
 /* Action button transformations */
-/* For primary slate-900 buttons, make them beautiful indigo/blue high contrast sleek designs */
+/* For primary slate-900 buttons, make them beautiful indigo/violet high contrast sleek designs */
 html.dark .the-arc-body button.bg-slate-900,
 html.dark .the-arc-body a.bg-slate-900,
-html.dark .the-arc-body div.bg-slate-900 {
-  background-color: #2563EB !important;
+html.dark .the-arc-body div.bg-slate-900,
+.the-arc-body button.bg-slate-900,
+.the-arc-body a.bg-slate-900 {
+  background-color: #7C3AED !important;
   color: #FFFFFF !important;
   transition: all 0.2s ease-in-out !important;
 }
 
 html.dark .the-arc-body button.bg-slate-900:hover,
-html.dark .the-arc-body a.bg-slate-900:hover {
-  background-color: #1D4ED8 !important;
+html.dark .the-arc-body a.bg-slate-900:hover,
+.the-arc-body button.bg-slate-900:hover {
+  background-color: #6D28D9 !important;
 }
 
 /* Secondaries */
 html.dark .the-arc-body button.bg-white,
 html.dark .the-arc-body button.bg-slate-50,
-html.dark .the-arc-body button.border-slate-250 {
+html.dark .the-arc-body button.border-slate-250,
+.the-arc-body button.bg-white,
+.the-arc-body button.bg-slate-50 {
   background-color: rgba(255, 255, 255, 0.05) !important;
   border-color: rgba(255, 255, 255, 0.08) !important;
   color: #E2E8F0 !important;
 }
 
 html.dark .the-arc-body button.bg-white:hover,
-html.dark .the-arc-body button.bg-slate-50:hover {
+html.dark .the-arc-body button.bg-slate-50:hover,
+.the-arc-body button.bg-white:hover {
   background-color: rgba(255, 255, 255, 0.1) !important;
 }
 
 /* Red / Purge button style checks */
 html.dark .the-arc-body .border-red-200,
-html.dark .the-arc-body .bg-red-50 {
+html.dark .the-arc-body .bg-red-50,
+.the-arc-body .border-red-200,
+.the-arc-body .bg-red-50 {
   background-color: rgba(239, 68, 68, 0.05) !important;
   border-color: rgba(239, 68, 68, 0.15) !important;
-  color: #F87171 !important;
-}
-
-html.dark .the-arc-body .hover\:bg-red-50:hover,
-html.dark .the-arc-body .hover\:bg-red-100:hover {
-  background-color: rgba(239, 68, 68, 0.1) !important;
 }
 
 html.dark .the-arc-body .text-red-700,
 html.dark .the-arc-body .text-red-650,
-html.dark .the-arc-body .text-red-600 {
+html.dark .the-arc-body .text-red-600,
+.the-arc-body .text-red-600 {
   color: #F87171 !important;
 }
 
-/* Green feedback tags */
+/* Emerald green safe stats style checks */
 html.dark .the-arc-body .bg-emerald-50,
 html.dark .the-arc-body .bg-emerald-55,
-html.dark .the-arc-body .bg-emerald-100 {
-  background-color: rgba(16, 185, 129, 0.05) !important;
+html.dark .the-arc-body .bg-emerald-100,
+.the-arc-body .bg-emerald-50,
+.the-arc-body .bg-emerald-100 {
+  background-color: rgba(16, 185, 129, 0.04) !important;
   border-color: rgba(16, 185, 129, 0.15) !important;
 }
 
 html.dark .the-arc-body .text-emerald-800,
 html.dark .the-arc-body .text-emerald-700,
-html.dark .the-arc-body .text-emerald-600 {
+html.dark .the-arc-body .text-emerald-600,
+.the-arc-body .text-emerald-600 {
   color: #34D399 !important;
 }
 
 /* Amber alert warnings */
 html.dark .the-arc-body .bg-amber-50,
-html.dark .the-arc-body .bg-amber-100 {
-  background-color: rgba(245, 158, 11, 0.05) !important;
+html.dark .the-arc-body .bg-amber-100,
+.the-arc-body .bg-amber-50,
+.the-arc-body .bg-amber-100 {
+  background-color: rgba(245, 158, 11, 0.04) !important;
   border-color: rgba(245, 158, 11, 0.15) !important;
 }
 
 html.dark .the-arc-body .text-amber-800,
 html.dark .the-arc-body .text-amber-700,
-html.dark .the-arc-body .text-amber-600 {
+html.dark .the-arc-body .text-amber-600,
+.the-arc-body .text-amber-600 {
   color: #FBBF24 !important;
 }
 
@@ -231,17 +266,19 @@ html.dark .the-arc-body .recharts-tooltip-cursor {
   fill: rgba(255, 255, 255, 0.04) !important;
 }
 html.dark .the-arc-body .recharts-default-tooltip {
-  background-color: #0D1117 !important;
-  border-color: rgba(255, 255, 255, 0.1) !important;
+  background-color: #090911 !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
   color: #E2E8F0 !important;
 }
 
 /* Academic calendar circles, tables, and typography refinements */
-html.dark .the-arc-body table {
-  background-color: #0D1117 !important;
+html.dark .the-arc-body table,
+.the-arc-body table {
+  background-color: #090911 !important;
 }
 
-html.dark .the-arc-body th {
+html.dark .the-arc-body th,
+.the-arc-body th {
   background-color: rgba(255, 255, 255, 0.03) !important;
   color: #8B949E !important;
   text-transform: uppercase !important;
@@ -249,7 +286,8 @@ html.dark .the-arc-body th {
   letter-spacing: 0.05em !important;
 }
 
-html.dark .the-arc-body tr:hover {
+html.dark .the-arc-body tr:hover,
+.the-arc-body tr:hover {
   background-color: rgba(255, 255, 255, 0.02) !important;
 }
 
