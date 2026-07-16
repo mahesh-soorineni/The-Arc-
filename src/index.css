@@ -11,214 +11,237 @@
   width: 6px;
   height: 6px;
 }
-::-webkit-scrollbar-track {
+html.dark ::-webkit-scrollbar-track {
   background: #0A0C10;
 }
-::-webkit-scrollbar-thumb {
+html:not(.dark) ::-webkit-scrollbar-track {
+  background: #F1F5F9;
+}
+html.dark ::-webkit-scrollbar-thumb {
   background: rgba(255, 255, 255, 0.1);
   border-radius: 3px;
 }
-::-webkit-scrollbar-thumb:hover {
+html:not(.dark) ::-webkit-scrollbar-thumb {
+  background: rgba(15, 23, 42, 0.1);
+  border-radius: 3px;
+}
+html.dark ::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.2);
+}
+html:not(.dark) ::-webkit-scrollbar-thumb:hover {
+  background: rgba(15, 23, 42, 0.2);
 }
 
 /* Sleek Interface global styles */
 body {
+  font-family: "Inter", sans-serif;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+html.dark body {
   background-color: #0A0C10 !important;
   color: #E2E8F0 !important;
-  font-family: "Inter", sans-serif;
+}
+
+html:not(.dark) body {
+  background-color: #F8FAFC !important;
+  color: #0F172A !important;
 }
 
 /* Skin generic Tailwind light classes to match "The Arc" Sleek Dark theme perfectly */
 
-.the-arc-body {
+html.dark .the-arc-body {
   background-color: #0A0C10 !important;
 }
 
+html:not(.dark) .the-arc-body {
+  background-color: #F8FAFC !important;
+}
+
 /* Any white background container becomes #0D1117 (Sleek card color) */
-.the-arc-body .bg-white {
+html.dark .the-arc-body .bg-white {
   background-color: #0D1117 !important;
   border-color: rgba(255, 255, 255, 0.05) !important;
   color: #E2E8F0 !important;
 }
 
 /* Light gray backgrounds become translucent dark overlays */
-.the-arc-body .bg-slate-50,
-.the-arc-body .bg-slate-100,
-.the-arc-body .bg-slate-100\/70,
-.the-arc-body .bg-slate-100\/50,
-.the-arc-body .bg-slate-100\/30,
-.the-arc-body .bg-slate-50\/50,
-.the-arc-body .bg-slate-50\/30,
-.the-arc-body .bg-indigo-50,
-.the-arc-body .bg-indigo-50\/50 {
+html.dark .the-arc-body .bg-slate-50,
+html.dark .the-arc-body .bg-slate-100,
+html.dark .the-arc-body .bg-slate-100\/70,
+html.dark .the-arc-body .bg-slate-100\/50,
+html.dark .the-arc-body .bg-slate-100\/30,
+html.dark .the-arc-body .bg-slate-50\/50,
+html.dark .the-arc-body .bg-slate-50\/30,
+html.dark .the-arc-body .bg-indigo-50,
+html.dark .the-arc-body .bg-indigo-50\/50 {
   background-color: rgba(255, 255, 255, 0.03) !important;
   color: #E2E8F0 !important;
   border-color: rgba(255, 255, 255, 0.05) !important;
 }
 
 /* Input boxes, textareas and selections */
-.the-arc-body input,
-.the-arc-body select,
-.the-arc-body textarea {
+html.dark .the-arc-body input,
+html.dark .the-arc-body select,
+html.dark .the-arc-body textarea {
   background-color: #0A0C10 !important;
   border-color: rgba(255, 255, 255, 0.1) !important;
   color: #FFFFFF !important;
 }
 
-.the-arc-body input:focus,
-.the-arc-body select:focus,
-.the-arc-body textarea:focus {
+html.dark .the-arc-body input:focus,
+html.dark .the-arc-body select:focus,
+html.dark .the-arc-body textarea:focus {
   border-color: #2563EB !important;
   outline: none !important;
   box-ring: 1px #2563EB !important;
 }
 
 /* Text selections & scroll overrides */
-.the-arc-body ::selection {
+html.dark .the-arc-body ::selection {
   background-color: rgba(37, 99, 235, 0.3) !important;
   color: #FFFFFF !important;
 }
 
 /* Override borders */
-.the-arc-body .border-slate-100,
-.the-arc-body .border-slate-200,
-.the-arc-body .border-slate-300,
-.the-arc-body .border-slate-400,
-.the-arc-body .border-slate-200\/80,
-.the-arc-body .border-slate-100\/80,
-.the-arc-body .border-b,
-.the-arc-body .border-t,
-.the-arc-body .border-r,
-.the-arc-body .border-l,
-.the-arc-body .divide-y > * {
+html.dark .the-arc-body .border-slate-100,
+html.dark .the-arc-body .border-slate-200,
+html.dark .the-arc-body .border-slate-300,
+html.dark .the-arc-body .border-slate-400,
+html.dark .the-arc-body .border-slate-200\/80,
+html.dark .the-arc-body .border-slate-100\/80,
+html.dark .the-arc-body .border-b,
+html.dark .the-arc-body .border-t,
+html.dark .the-arc-body .border-r,
+html.dark .the-arc-body .border-l,
+html.dark .the-arc-body .divide-y > * {
   border-color: rgba(255, 255, 255, 0.05) !important;
 }
 
 /* Fix text colors from hardcoded dark-grays to elegant whites/silvers */
-.the-arc-body .text-slate-900,
-.the-arc-body .text-slate-950,
-.the-arc-body .text-slate-850,
-.the-arc-body .text-slate-800,
-.the-arc-body .text-slate-700,
-.the-arc-body .text-indigo-950,
-.the-arc-body .text-indigo-900 {
+html.dark .the-arc-body .text-slate-900,
+html.dark .the-arc-body .text-slate-950,
+html.dark .the-arc-body .text-slate-850,
+html.dark .the-arc-body .text-slate-800,
+html.dark .the-arc-body .text-slate-700,
+html.dark .the-arc-body .text-indigo-950,
+html.dark .the-arc-body .text-indigo-900 {
   color: #FFFFFF !important;
 }
 
-.the-arc-body .text-slate-600,
-.the-arc-body .text-slate-500 {
+html.dark .the-arc-body .text-slate-600,
+html.dark .the-arc-body .text-slate-500 {
   color: #94A3B8 !important;
 }
 
-.the-arc-body .text-indigo-600,
-.the-arc-body .text-indigo-705 {
+html.dark .the-arc-body .text-indigo-600,
+html.dark .the-arc-body .text-indigo-705 {
   color: #60A5FA !important;
 }
 
-.the-arc-body .text-slate-450,
-.the-arc-body .text-slate-400 {
+html.dark .the-arc-body .text-slate-450,
+html.dark .the-arc-body .text-slate-400 {
   color: #64748B !important;
 }
 
 /* Action button transformations */
 /* For primary slate-900 buttons, make them beautiful indigo/blue high contrast sleek designs */
-.the-arc-body button.bg-slate-900,
-.the-arc-body a.bg-slate-900,
-.the-arc-body div.bg-slate-900 {
+html.dark .the-arc-body button.bg-slate-900,
+html.dark .the-arc-body a.bg-slate-900,
+html.dark .the-arc-body div.bg-slate-900 {
   background-color: #2563EB !important;
   color: #FFFFFF !important;
   transition: all 0.2s ease-in-out !important;
 }
 
-.the-arc-body button.bg-slate-900:hover,
-.the-arc-body a.bg-slate-900:hover {
+html.dark .the-arc-body button.bg-slate-900:hover,
+html.dark .the-arc-body a.bg-slate-900:hover {
   background-color: #1D4ED8 !important;
 }
 
 /* Secondaries */
-.the-arc-body button.bg-white,
-.the-arc-body button.bg-slate-50,
-.the-arc-body button.border-slate-250 {
+html.dark .the-arc-body button.bg-white,
+html.dark .the-arc-body button.bg-slate-50,
+html.dark .the-arc-body button.border-slate-250 {
   background-color: rgba(255, 255, 255, 0.05) !important;
   border-color: rgba(255, 255, 255, 0.08) !important;
   color: #E2E8F0 !important;
 }
 
-.the-arc-body button.bg-white:hover,
-.the-arc-body button.bg-slate-50:hover {
+html.dark .the-arc-body button.bg-white:hover,
+html.dark .the-arc-body button.bg-slate-50:hover {
   background-color: rgba(255, 255, 255, 0.1) !important;
 }
 
 /* Red / Purge button style checks */
-.the-arc-body .border-red-200,
-.the-arc-body .bg-red-50 {
+html.dark .the-arc-body .border-red-200,
+html.dark .the-arc-body .bg-red-50 {
   background-color: rgba(239, 68, 68, 0.05) !important;
   border-color: rgba(239, 68, 68, 0.15) !important;
   color: #F87171 !important;
 }
 
-.the-arc-body .hover\:bg-red-50:hover,
-.the-arc-body .hover\:bg-red-100:hover {
+html.dark .the-arc-body .hover\:bg-red-50:hover,
+html.dark .the-arc-body .hover\:bg-red-100:hover {
   background-color: rgba(239, 68, 68, 0.1) !important;
 }
 
-.the-arc-body .text-red-700,
-.the-arc-body .text-red-650,
-.the-arc-body .text-red-600 {
+html.dark .the-arc-body .text-red-700,
+html.dark .the-arc-body .text-red-650,
+html.dark .the-arc-body .text-red-600 {
   color: #F87171 !important;
 }
 
 /* Green feedback tags */
-.the-arc-body .bg-emerald-50,
-.the-arc-body .bg-emerald-55,
-.the-arc-body .bg-emerald-100 {
+html.dark .the-arc-body .bg-emerald-50,
+html.dark .the-arc-body .bg-emerald-55,
+html.dark .the-arc-body .bg-emerald-100 {
   background-color: rgba(16, 185, 129, 0.05) !important;
   border-color: rgba(16, 185, 129, 0.15) !important;
 }
 
-.the-arc-body .text-emerald-800,
-.the-arc-body .text-emerald-700,
-.the-arc-body .text-emerald-600 {
+html.dark .the-arc-body .text-emerald-800,
+html.dark .the-arc-body .text-emerald-700,
+html.dark .the-arc-body .text-emerald-600 {
   color: #34D399 !important;
 }
 
 /* Amber alert warnings */
-.the-arc-body .bg-amber-50,
-.the-arc-body .bg-amber-100 {
+html.dark .the-arc-body .bg-amber-50,
+html.dark .the-arc-body .bg-amber-100 {
   background-color: rgba(245, 158, 11, 0.05) !important;
   border-color: rgba(245, 158, 11, 0.15) !important;
 }
 
-.the-arc-body .text-amber-800,
-.the-arc-body .text-amber-700,
-.the-arc-body .text-amber-600 {
+html.dark .the-arc-body .text-amber-800,
+html.dark .the-arc-body .text-amber-700,
+html.dark .the-arc-body .text-amber-600 {
   color: #FBBF24 !important;
 }
 
 /* Recharts / SVG colors adaptiveness */
-.the-arc-body .recharts-cartesian-grid-horizontal line,
-.the-arc-body .recharts-cartesian-grid-vertical line {
+html.dark .the-arc-body .recharts-cartesian-grid-horizontal line,
+html.dark .the-arc-body .recharts-cartesian-grid-vertical line {
   stroke: rgba(255, 255, 255, 0.05) !important;
 }
-.the-arc-body .recharts-text {
+html.dark .the-arc-body .recharts-text {
   fill: #94A3B8 !important;
 }
-.the-arc-body .recharts-tooltip-cursor {
+html.dark .the-arc-body .recharts-tooltip-cursor {
   fill: rgba(255, 255, 255, 0.04) !important;
 }
-.the-arc-body .recharts-default-tooltip {
+html.dark .the-arc-body .recharts-default-tooltip {
   background-color: #0D1117 !important;
   border-color: rgba(255, 255, 255, 0.1) !important;
   color: #E2E8F0 !important;
 }
 
 /* Academic calendar circles, tables, and typography refinements */
-.the-arc-body table {
+html.dark .the-arc-body table {
   background-color: #0D1117 !important;
 }
 
-.the-arc-body th {
+html.dark .the-arc-body th {
   background-color: rgba(255, 255, 255, 0.03) !important;
   color: #8B949E !important;
   text-transform: uppercase !important;
@@ -226,11 +249,11 @@ body {
   letter-spacing: 0.05em !important;
 }
 
-.the-arc-body tr:hover {
+html.dark .the-arc-body tr:hover {
   background-color: rgba(255, 255, 255, 0.02) !important;
 }
 
 /* Special calendar overrides / cards styling compatibility */
-.the-arc-body .divide-slate-200 > * {
+html.dark .the-arc-body .divide-slate-200 > * {
   border-color: rgba(255, 255, 255, 0.05) !important;
 }

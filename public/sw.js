@@ -13,12 +13,18 @@ const ASSETS = [
 
 // Install Event - cache core skeleton shell
 self.addEventListener('install', (e) => {
-  self.skipWaiting();
   e.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
       return cache.addAll(ASSETS);
     })
   );
+});
+
+// Message Event - handle message sent from client to skip waiting
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
 });
 
 // Activate Event - clean up obsolete cache versions

@@ -24,7 +24,8 @@ import {
   SpecialDayOverride,
   Subject,
   Timetable,
-  DayType
+  DayType,
+  UserProfile
 } from '../types';
 import {
   determineDayType,
@@ -47,6 +48,7 @@ interface CalendarManagerProps {
   onDeleteOverride: (date: string) => void;
   onTriggerShare: (date: string) => void;
   onTriggerExport: (date: string) => void;
+  userProfile?: UserProfile;
 }
 
 export default function CalendarManager({
@@ -62,7 +64,8 @@ export default function CalendarManager({
   onDeleteCalendarItem,
   onDeleteOverride,
   onTriggerShare,
-  onTriggerExport
+  onTriggerExport,
+  userProfile
 }: CalendarManagerProps) {
   // Local calendar navigation month/year states
   // Let's seed default month to June 2026 to match local system date of test!
@@ -203,7 +206,9 @@ export default function CalendarManager({
         <div className="flex items-center justify-between pb-2 border-b border-slate-100">
           <div className="flex items-center space-x-2">
             <CalendarDays className="h-5 w-5 text-slate-500" />
-            <h3 className="font-sans font-bold text-base text-slate-900 tracking-tight">Academic Scheduler</h3>
+            <h3 className="font-sans font-bold text-base text-slate-900 tracking-tight">
+              Academic Scheduler ({userProfile?.semester || 'Current Semester'})
+            </h3>
           </div>
 
           <div className="flex items-center space-x-1">
@@ -325,21 +330,21 @@ export default function CalendarManager({
         </div>
 
         {/* Color legend panel */}
-        <div className="text-[10px] sm:text-xs grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 border-t border-slate-50 font-mono text-slate-500">
-          <div className="flex items-center space-x-2">
-            <span className="h-3 w-3 bg-emerald-50 border border-emerald-100 rounded" />
+        <div className="text-[11px] sm:text-xs grid grid-cols-2 sm:grid-cols-4 gap-3 pt-3 border-t border-slate-200 dark:border-white/10 font-sans font-semibold text-slate-700 dark:text-white">
+          <div className="flex items-center space-x-2.5">
+            <span className="h-4 w-4 bg-emerald-500 dark:bg-[#10B981] border-2 border-emerald-400 dark:border-emerald-300 rounded shadow-sm shadow-emerald-500/20 shrink-0" />
             <span>Present Class</span>
           </div>
-          <div className="flex items-center space-x-2">
-            <span className="h-3 w-3 bg-rose-50 border border-rose-100 rounded" />
+          <div className="flex items-center space-x-2.5">
+            <span className="h-4 w-4 bg-rose-500 dark:bg-[#EF4444] border-2 border-rose-400 dark:border-rose-300 rounded shadow-sm shadow-rose-500/20 shrink-0" />
             <span>Absent Block</span>
           </div>
-          <div className="flex items-center space-x-2">
-            <span className="h-3 w-3 bg-amber-50 border border-amber-100 rounded" />
+          <div className="flex items-center space-x-2.5">
+            <span className="h-4 w-4 bg-amber-500 dark:bg-[#F59E0B] border-2 border-amber-400 dark:border-amber-300 rounded shadow-sm shadow-amber-500/20 shrink-0" />
             <span>Partial Day</span>
           </div>
-          <div className="flex items-center space-x-2">
-            <span className="h-3 w-3 bg-indigo-50 border border-indigo-100 rounded" />
+          <div className="flex items-center space-x-2.5">
+            <span className="h-4 w-4 bg-blue-500 dark:bg-[#3B82F6] border-2 border-blue-400 dark:border-blue-300 rounded shadow-sm shadow-blue-500/20 shrink-0" />
             <span>Holiday/Exam</span>
           </div>
         </div>
@@ -432,7 +437,7 @@ export default function CalendarManager({
           <h3 className="font-sans font-bold text-lg text-slate-900 mt-1">
             {selectedDayInfo.name}
           </h3>
-          <p className="text-xs font-mono text-slate-500">{currentDate}</p>
+          <p className="text-xs font-mono text-slate-500">{formatDateToDDMMYYYY(currentDate)}</p>
         </div>
 
         {/* Type status badge */}
@@ -589,7 +594,7 @@ export default function CalendarManager({
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
                   <label className="block text-xs font-semibold text-slate-500 uppercase tracking-widest font-mono">
-                    Start Date (YYYY-MM-DD)
+                    Start Date (DD-MM-YYYY)
                   </label>
                   <input
                     type="date"
@@ -610,7 +615,7 @@ export default function CalendarManager({
 
                 <div className="space-y-1">
                   <label className="block text-xs font-semibold text-slate-500 uppercase tracking-widest font-mono">
-                    End Date (YYYY-MM-DD)
+                    End Date (DD-MM-YYYY)
                   </label>
                   <input
                     type="date"

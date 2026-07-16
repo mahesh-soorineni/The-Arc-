@@ -34,6 +34,18 @@ export type DayType =
   | 'HalfDay'
   | 'CancelledClasses';
 
+export interface SlotDetail {
+  id?: string;
+  subjectCode: string;
+  hours: number;
+  status: 'Conducted' | 'Cancelled' | 'Extra';
+  isAttended: boolean;
+  isLab?: boolean;
+  startTime?: string;
+  endTime?: string;
+  notes?: string;
+}
+
 export interface AttendanceRecord {
   date: string; // YYYY-MM-DD
   dayOfWeek: string; // 'Monday', 'Tuesday', ...
@@ -49,6 +61,7 @@ export interface AttendanceRecord {
   isMarked: boolean;
   notes?: string;
   editTimestamp?: string;
+  slotsDetails?: SlotDetail[];
 }
 
 export interface SpecialDayOverride {

@@ -308,3 +308,55 @@ export function generateUnifiedBackupPdf(options: GeneratePdfOptions): Blob {
 
   return doc.output('blob');
 }
+
+export async function downloadOrSharePdf(doc: jsPDF, filename: string): Promise<{ shared: boolean }> {
+  try {
+    const pdfBlob = doc.output('blob');
+    const file = new File([pdfBlob], filename, { type: 'application/pdf' });
+
+    // Try Web Share API (native share on Android/iOS)
+    if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+      await navigator.share({
+        files: [file],
+        title: filename,
+        text: 'Attendance Ledger Export'
+      });
+      return { shared: true };
+    }
+  } catch (err) {
+    console.warn('Web Share failed or unsupported:', err);
+  }
+
+  // Fallback programmatic download
+  try {
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    if (isMobile) {
+      // Force base64 URI on mobile to ensure Android/iOS download managers parse explicit application/pdf headers
+      const base64Str = doc.output('datauristring');
+      const a = document.createElement('a');
+      a.href = base64Str;
+      a.download = filename;
+      a.style.display = 'none';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    } else {
+      // Standard blob download for desktop
+      const pdfBlob = doc.output('blob');
+      const url = URL.createObjectURL(pdfBlob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      a.style.display = 'none';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 100);
+    }
+  } catch (err) {
+    console.error('Programmatic download fallback failed:', err);
+    doc.save(filename);
+  }
+
+  return { shared: false };
+}

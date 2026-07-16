@@ -20,10 +20,19 @@ import {
   Sparkles,
   Upload,
   Download,
-  Image as ImageIcon
+  Image as ImageIcon,
+  Info
 } from 'lucide-react';
 import { UserProfile } from '../types';
 import { User as FirebaseUser } from 'firebase/auth';
+import { getTodayDateString } from '../utils/rulesEngine';
+import { 
+  generateBackupPayload, 
+  validateBackupPayload, 
+  restoreBackupToStorage, 
+  ArcBackupPayload 
+} from '../utils/backupEngine';
+import { safeLocalStorage } from '../utils/storage';
 
 interface SettingsTabProps {
   userProfile: UserProfile;
@@ -51,6 +60,11 @@ interface SettingsTabProps {
   onImportData?: (e: React.ChangeEvent<HTMLInputElement>) => void;
   importingError?: string | null;
   importingSuccess?: boolean;
+  theme: 'dark' | 'light' | 'system';
+  onUpdateTheme: (val: 'dark' | 'light' | 'system') => void;
+  subjects?: any[];
+  records?: any[];
+  timetables?: any[];
 }
 
 export default function SettingsTab({
@@ -78,12 +92,145 @@ export default function SettingsTab({
   onExportData,
   onImportData,
   importingError,
-  importingSuccess
+  importingSuccess,
+  theme,
+  onUpdateTheme,
+  subjects,
+  records,
+  timetables
 }: SettingsTabProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [profileUrlInput, setProfileUrlInput] = useState<string>(userProfile.imageUrl || '');
   const [isSavedBanner, setIsSavedBanner] = useState<boolean>(false);
   const [remindersSavedBanner, setRemindersSavedBanner] = useState<boolean>(false);
+
+  // --- Backup Engine Local States ---
+  const [backupStatus, setBackupStatus] = useState<'idle' | 'exporting' | 'export_success' | 'export_error' | 'import_verifying' | 'import_pending_confirm' | 'importing' | 'import_success' | 'import_error'>('idle');
+  const [backupProgress, setBackupProgress] = useState<number>(0);
+  const [backupMessage, setBackupMessage] = useState<string>('');
+  const [pendingPayload, setPendingPayload] = useState<ArcBackupPayload | null>(null);
+  const [lastExportTime, setLastExportTime] = useState<string | null>(() => safeLocalStorage.getItem('the_arc_last_export_time'));
+
+  const handleExportBackup = async () => {
+    try {
+      setBackupStatus('exporting');
+      setBackupProgress(10);
+      setBackupMessage('Scanning local databases...');
+
+      await new Promise(r => setTimeout(r, 200));
+      setBackupProgress(40);
+      setBackupMessage('Compiling student profile & attendance records...');
+
+      const payload = generateBackupPayload();
+
+      await new Promise(r => setTimeout(r, 200));
+      setBackupProgress(75);
+      setBackupMessage('Calculating verification checksum...');
+
+      const rawJson = JSON.stringify(payload, null, 2);
+
+      await new Promise(r => setTimeout(r, 200));
+      setBackupProgress(100);
+      setBackupMessage('Downloading backup package...');
+
+      const fileDate = new Date().toISOString().split('T')[0].replace(/-/g, '');
+      const cleanName = (userProfile.name || "scholar").toLowerCase().replace(/\s+/g, '_');
+      const filename = `the_arc_backup_${cleanName}_${fileDate}.arcbackup`;
+
+      const blob = new Blob([rawJson], { type: 'application/json' });
+      
+      const nowStr = new Date().toLocaleString();
+      safeLocalStorage.setItem('the_arc_last_export_time', nowStr);
+      setLastExportTime(nowStr);
+
+      const downloadUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = downloadUrl;
+      a.download = filename;
+      a.style.display = 'none';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(downloadUrl);
+
+      setBackupStatus('export_success');
+      setBackupMessage(`Successfully exported: ${filename}`);
+      setTimeout(() => setBackupStatus('idle'), 4000);
+    } catch (e: any) {
+      console.error(e);
+      setBackupStatus('export_error');
+      setBackupMessage(e.message || 'Failed to generate backup.');
+    }
+  };
+
+  const handleBackupFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setBackupStatus('import_verifying');
+    setBackupProgress(20);
+    setBackupMessage('Reading backup file...');
+
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      try {
+        const text = event.target?.result as string;
+        if (!text) {
+          throw new Error('Backup file is empty.');
+        }
+
+        await new Promise(r => setTimeout(r, 300));
+        setBackupProgress(50);
+        setBackupMessage('Verifying structural integrity & checking checksum...');
+
+        const result = validateBackupPayload(text);
+        if (!result.isValid || !result.payload) {
+          throw new Error(result.error || 'Invalid backup payload.');
+        }
+
+        await new Promise(r => setTimeout(r, 200));
+        setBackupProgress(100);
+
+        setPendingPayload(result.payload);
+        setBackupStatus('import_pending_confirm');
+        setBackupMessage('Backup file verified. Ready for restoration.');
+      } catch (err: any) {
+        setBackupStatus('import_error');
+        setBackupMessage(err.message || 'Failed to verify backup.');
+        setPendingPayload(null);
+      }
+    };
+
+    reader.readAsText(file);
+  };
+
+  const handleConfirmRestore = async () => {
+    if (!pendingPayload) return;
+
+    try {
+      setBackupStatus('importing');
+      setBackupProgress(30);
+      setBackupMessage('Rolling database back and recreating storage layers...');
+
+      await new Promise(r => setTimeout(r, 400));
+      setBackupProgress(70);
+      setBackupMessage('Reconstructing schedules and importing logs...');
+
+      restoreBackupToStorage(pendingPayload);
+
+      await new Promise(r => setTimeout(r, 300));
+      setBackupProgress(100);
+      setBackupStatus('import_success');
+      setBackupMessage('Restoration complete! Rebooting system...');
+
+      setTimeout(() => {
+        window.location.reload();
+      }, 1500);
+    } catch (err: any) {
+      setBackupStatus('import_error');
+      setBackupMessage(err.message || 'Restoration failed.');
+    }
+  };
 
   const triggerRemindersSaved = () => {
     setRemindersSavedBanner(true);
@@ -150,8 +297,8 @@ export default function SettingsTab({
   const [semester, setSemester] = useState(userProfile.semester || '');
   const [email, setEmail] = useState(userProfile.email || '');
   const [minAttendance, setMinAttendance] = useState(userProfile.minAttendance);
-  const [semesterStartDate, setSemesterStartDate] = useState(userProfile.semesterStartDate || '2026-05-01');
-  const [semesterEndDate, setSemesterEndDate] = useState(userProfile.semesterEndDate || '2026-11-30');
+  const [semesterStartDate, setSemesterStartDate] = useState(userProfile.semesterStartDate || getTodayDateString());
+  const [semesterEndDate, setSemesterEndDate] = useState(userProfile.semesterEndDate || getTodayDateString());
 
   React.useEffect(() => {
     setName(userProfile.name);
@@ -162,8 +309,8 @@ export default function SettingsTab({
     setSemester(userProfile.semester || '');
     setEmail(userProfile.email || '');
     setMinAttendance(userProfile.minAttendance);
-    setSemesterStartDate(userProfile.semesterStartDate || '2026-05-01');
-    setSemesterEndDate(userProfile.semesterEndDate || '2026-11-30');
+    setSemesterStartDate(userProfile.semesterStartDate || getTodayDateString());
+    setSemesterEndDate(userProfile.semesterEndDate || getTodayDateString());
   }, [userProfile]);
 
   const handleProfileSubmit = (e: React.FormEvent) => {
@@ -544,6 +691,54 @@ export default function SettingsTab({
 
             <div className="space-y-4">
               
+              {/* Theme Preferences */}
+              <div className="space-y-3 bg-black/10 dark:bg-black/20 p-4 rounded-xl border border-slate-200 dark:border-white/5">
+                <div className="space-y-0.5">
+                  <h4 className="text-xs font-bold text-slate-800 dark:text-white">Theme Selection</h4>
+                  <p className="text-[10px] text-slate-500 dark:text-slate-400">
+                    Switch between light, dark, or system default interfaces instantly.
+                  </p>
+                </div>
+                <div className="grid grid-cols-3 gap-2 pt-1.5">
+                  <button
+                    type="button"
+                    onClick={() => onUpdateTheme('dark')}
+                    className={`px-3 py-2.5 rounded-xl text-xs font-bold border transition-all flex flex-col items-center justify-center gap-1 cursor-pointer ${
+                      theme === 'dark'
+                        ? 'bg-blue-600 border-blue-500 text-white shadow-md shadow-blue-500/20'
+                        : 'bg-white dark:bg-[#0A0D14]/85 text-slate-700 dark:text-slate-400 border-slate-200 dark:border-white/5 hover:bg-slate-50 dark:hover:bg-[#0A0D14]/90 hover:text-slate-900 dark:hover:text-white'
+                    }`}
+                  >
+                    <span className="text-sm">🌙</span>
+                    <span>Dark Mode</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onUpdateTheme('light')}
+                    className={`px-3 py-2.5 rounded-xl text-xs font-bold border transition-all flex flex-col items-center justify-center gap-1 cursor-pointer ${
+                      theme === 'light'
+                        ? 'bg-blue-600 border-blue-500 text-white shadow-md shadow-blue-500/20'
+                        : 'bg-white dark:bg-[#0A0D14]/85 text-slate-700 dark:text-slate-400 border-slate-200 dark:border-white/5 hover:bg-slate-50 dark:hover:bg-[#0A0D14]/90 hover:text-slate-900 dark:hover:text-white'
+                    }`}
+                  >
+                    <span className="text-sm">☀️</span>
+                    <span>Light Mode</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onUpdateTheme('system')}
+                    className={`px-3 py-2.5 rounded-xl text-xs font-bold border transition-all flex flex-col items-center justify-center gap-1 cursor-pointer ${
+                      theme === 'system'
+                        ? 'bg-blue-600 border-blue-500 text-white shadow-md shadow-blue-500/20'
+                        : 'bg-white dark:bg-[#0A0D14]/85 text-slate-700 dark:text-slate-400 border-slate-200 dark:border-white/5 hover:bg-slate-50 dark:hover:bg-[#0A0D14]/90 hover:text-slate-900 dark:hover:text-white'
+                    }`}
+                  >
+                    <span className="text-sm">⚙️</span>
+                    <span>System</span>
+                  </button>
+                </div>
+              </div>
+
               {/* Simulator Date Control */}
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5 bg-black/20 p-3 rounded-xl border border-white/5">
                 <div className="space-y-0.5">
@@ -731,61 +926,247 @@ export default function SettingsTab({
           <div className="bg-[#0D1117] border border-white/10 rounded-2xl p-5 space-y-4">
             <h3 className="text-xs font-mono font-bold uppercase tracking-wider text-slate-400 border-b border-white/5 pb-3 flex items-center gap-1.5">
               <Database className="h-4 w-4 text-blue-400" />
-              <span>Full Application Portability</span>
+              <span>THE ARC BACKUP ENGINE</span>
             </h3>
 
             <p className="text-[11px] text-slate-400 leading-normal text-left">
               Preserve your exact application state, student records, custom calendars, timetables, statistics, and uploaded portrait. Export a master backup file to easily import onto another browser or device with zero configuration required.
             </p>
 
-            {importingError && (
-              <div className="bg-red-500/10 border border-red-500/30 text-red-400 p-3 rounded-xl text-xs font-medium text-left">
-                ⚠️ {importingError}
+            {/* Backup stats / local DB info */}
+            <div className="bg-[#07090E] border border-white/5 rounded-xl p-3.5 space-y-3 font-sans">
+              <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
+                <Info className="h-3.5 w-3.5 text-blue-400" />
+                <span>Local Database Information</span>
+              </div>
+              <div className="grid grid-cols-2 gap-2 text-[10px]">
+                <div className="bg-white/2 p-2.5 rounded-lg border border-white/2">
+                  <div className="text-slate-500 font-semibold uppercase tracking-wider text-[8px]">Student Profile</div>
+                  <div className="text-slate-200 mt-0.5 truncate font-medium">{userProfile.name || "Offline Guest"}</div>
+                </div>
+                <div className="bg-white/2 p-2.5 rounded-lg border border-white/2">
+                  <div className="text-slate-500 font-semibold uppercase tracking-wider text-[8px]">Schema Version</div>
+                  <div className="text-slate-200 mt-0.5 font-mono">v{safeLocalStorage.getItem('the_arc_schema_version') || '2.6'}</div>
+                </div>
+                <div className="bg-white/2 p-2.5 rounded-lg border border-white/2">
+                  <div className="text-slate-500 font-semibold uppercase tracking-wider text-[8px]">Registered Subjects</div>
+                  <div className="text-slate-200 mt-0.5 font-bold">{subjects?.length || 0} Subjects</div>
+                </div>
+                <div className="bg-white/2 p-2.5 rounded-lg border border-white/2">
+                  <div className="text-slate-500 font-semibold uppercase tracking-wider text-[8px]">Daily Records Logged</div>
+                  <div className="text-slate-200 mt-0.5 font-bold">{records?.length || 0} Days</div>
+                </div>
+              </div>
+              {lastExportTime && (
+                <div className="text-[9.5px] text-slate-500 mt-1 text-center font-mono">
+                  Last Backup: <span className="text-slate-400 font-sans">{lastExportTime}</span>
+                </div>
+              )}
+            </div>
+
+            {/* Active transaction feedback (Export/Import states) */}
+            {backupStatus === 'exporting' && (
+              <div className="bg-blue-500/10 border border-blue-500/20 p-3.5 rounded-xl space-y-2 text-left">
+                <div className="flex justify-between items-center text-xs font-bold text-blue-400">
+                  <span className="flex items-center gap-1.5">
+                    <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                    <span>Generating Backup Package</span>
+                  </span>
+                  <span className="font-mono">{backupProgress}%</span>
+                </div>
+                <div className="w-full h-1 bg-slate-900 rounded-full overflow-hidden">
+                  <div className="h-full bg-blue-500 transition-all duration-300" style={{ width: `${backupProgress}%` }}></div>
+                </div>
+                <p className="text-[10px] text-slate-400 italic font-mono">{backupMessage}</p>
               </div>
             )}
 
-            {importingSuccess && (
+            {backupStatus === 'export_success' && (
+              <div className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 p-3 rounded-xl text-xs font-medium flex items-center gap-2 text-left animate-fade-in">
+                <CheckCircle className="h-4 w-4 shrink-0 animate-bounce text-emerald-400" />
+                <span>{backupMessage}</span>
+              </div>
+            )}
+
+            {backupStatus === 'export_error' && (
+              <div className="bg-red-500/10 border border-red-500/30 text-red-400 p-3 rounded-xl text-xs font-medium text-left">
+                ⚠️ {backupMessage}
+              </div>
+            )}
+
+            {backupStatus === 'import_verifying' && (
+              <div className="bg-blue-500/10 border border-blue-500/20 p-3.5 rounded-xl space-y-2 text-left">
+                <div className="flex justify-between items-center text-xs font-bold text-blue-400">
+                  <span className="flex items-center gap-1.5">
+                    <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                    <span>Verifying File Integrity</span>
+                  </span>
+                  <span className="font-mono">{backupProgress}%</span>
+                </div>
+                <div className="w-full h-1 bg-slate-900 rounded-full overflow-hidden">
+                  <div className="h-full bg-blue-500 transition-all duration-300" style={{ width: `${backupProgress}%` }}></div>
+                </div>
+                <p className="text-[10px] text-slate-400 italic font-mono">{backupMessage}</p>
+              </div>
+            )}
+
+            {backupStatus === 'importing' && (
+              <div className="bg-purple-500/10 border border-purple-500/20 p-3.5 rounded-xl space-y-2 text-left">
+                <div className="flex justify-between items-center text-xs font-bold text-purple-400">
+                  <span className="flex items-center gap-1.5">
+                    <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                    <span>Restoring Database State</span>
+                  </span>
+                  <span className="font-mono">{backupProgress}%</span>
+                </div>
+                <div className="w-full h-1 bg-slate-900 rounded-full overflow-hidden">
+                  <div className="h-full bg-purple-500 transition-all duration-300" style={{ width: `${backupProgress}%` }}></div>
+                </div>
+                <p className="text-[10px] text-slate-400 italic font-mono">{backupMessage}</p>
+              </div>
+            )}
+
+            {backupStatus === 'import_success' && (
               <div className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 p-3 rounded-xl text-xs font-medium flex items-center gap-2 text-left">
                 <CheckCircle className="h-4 w-4 shrink-0 animate-bounce text-emerald-400" />
-                <span>Reconstructing semester data. Rebooting application...</span>
+                <span>{backupMessage}</span>
               </div>
             )}
 
-            <div className="grid grid-cols-2 gap-3.5">
-              {/* Export Feature */}
-              <button
-                type="button"
-                onClick={onExportData}
-                className="col-span-1 px-3 py-3 bg-blue-600/10 hover:bg-blue-600/20 text-blue-400 hover:text-blue-300 border border-blue-500/20 hover:border-blue-500/40 rounded-xl transition-all font-bold text-xs cursor-pointer flex flex-col items-center justify-center gap-1.5 text-center active:scale-97 shadow-sm"
-              >
-                <Download className="h-5 w-5 shrink-0 text-blue-400" />
-                <span className="font-sans font-bold text-xs">Export Backup</span>
-                <span className="text-[8.5px] font-normal font-mono text-slate-500 leading-tight">Download State File</span>
-              </button>
+            {backupStatus === 'import_error' && (
+              <div className="bg-red-500/10 border border-red-500/30 text-red-400 p-3 rounded-xl text-xs font-medium text-left">
+                ⚠️ {backupMessage}
+              </div>
+            )}
 
-              {/* Import Feature */}
-              <div className="col-span-1 relative">
-                <input
-                  type="file"
-                  id="settings-import-data-file"
-                  accept=".pdf,.json"
-                  onChange={onImportData}
-                  className="hidden"
-                />
+            {/* Import interactive confirmation panel */}
+            {backupStatus === 'import_pending_confirm' && pendingPayload && (
+              <div className="bg-blue-950/10 border border-blue-500/20 rounded-xl p-4 space-y-3 text-left animate-fade-in">
+                <div className="flex items-center gap-2 text-xs font-bold text-blue-400">
+                  <ShieldAlert className="h-4 w-4" />
+                  <span>Verify Backup Details Before Overwrite</span>
+                </div>
+                <p className="text-[10px] text-slate-400 leading-normal">
+                  A valid backup was parsed and verified successfully. Confirming this import will overwrite your existing student profile, subject catalogs, timetables, and daily attendance logs.
+                </p>
+                
+                <div className="bg-[#07090E] border border-white/5 rounded-lg p-3 space-y-2 text-[10px]">
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">Student Profile:</span>
+                    <span className="text-slate-200 font-semibold">
+                      {(() => {
+                        try {
+                          const p = JSON.parse(pendingPayload.data.localStorage.the_arc_profile || '{}');
+                          return p.name || 'Offline Guest';
+                        } catch {
+                          return 'Offline Guest';
+                        }
+                      })()}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">Course / Branch:</span>
+                    <span className="text-slate-200 font-mono">
+                      {(() => {
+                        try {
+                          const p = JSON.parse(pendingPayload.data.localStorage.the_arc_profile || '{}');
+                          return p.course || 'N/A';
+                        } catch {
+                          return 'N/A';
+                        }
+                      })()}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">Attendance Records:</span>
+                    <span className="text-slate-200 font-bold">
+                      {(() => {
+                        try {
+                          const recs = JSON.parse(pendingPayload.data.localStorage.the_arc_records || '[]');
+                          return recs.length;
+                        } catch {
+                          return '0';
+                        }
+                      })()} Days
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">Export Timestamp:</span>
+                    <span className="text-slate-300 font-mono">
+                      {new Date(pendingPayload.generatedAt).toLocaleString()}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center pt-1.5 border-t border-white/5">
+                    <span className="text-slate-500">Integrity Signature:</span>
+                    <span className="text-emerald-400 font-mono text-[9px] bg-emerald-950/20 px-1.5 py-0.5 rounded border border-emerald-500/10">
+                      PASSED ({pendingPayload.checksum ? `CRC-${pendingPayload.checksum.toUpperCase()}` : "LEGACY"})
+                    </span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setBackupStatus('idle');
+                      setPendingPayload(null);
+                    }}
+                    className="px-3 py-2 bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white border border-white/5 rounded-lg text-xs font-semibold cursor-pointer transition active:scale-97 text-center"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleConfirmRestore}
+                    className="px-3 py-2 bg-emerald-600/25 hover:bg-emerald-600/40 text-emerald-300 hover:text-emerald-200 border border-emerald-500/30 rounded-lg text-xs font-bold cursor-pointer transition active:scale-97 text-center"
+                  >
+                    Confirm & Overwrite
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Direct buttons */}
+            {backupStatus !== 'import_pending_confirm' && (
+              <div className="grid grid-cols-2 gap-3.5">
+                {/* Export Feature */}
                 <button
                   type="button"
-                  onClick={() => document.getElementById('settings-import-data-file')?.click()}
-                  className="w-full h-full px-3 py-3 bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white border border-white/5 hover:border-white/10 rounded-xl transition-all font-bold text-xs cursor-pointer flex flex-col items-center justify-center gap-1.5 text-center active:scale-97 shadow-sm"
+                  onClick={handleExportBackup}
+                  disabled={backupStatus === 'exporting' || backupStatus === 'importing' || backupStatus === 'import_verifying'}
+                  className="col-span-1 px-3 py-3 bg-blue-600/10 hover:bg-blue-600/20 text-blue-400 hover:text-blue-300 border border-blue-500/20 hover:border-blue-500/40 rounded-xl transition-all font-bold text-xs cursor-pointer flex flex-col items-center justify-center gap-1.5 text-center active:scale-97 shadow-sm disabled:opacity-50 disabled:pointer-events-none"
                 >
-                  <Upload className="h-5 w-5 shrink-0 text-slate-400" />
-                  <span className="font-sans font-bold text-xs">Import Backup</span>
-                  <span className="text-[8.5px] font-normal font-mono text-slate-500 leading-tight">Restore State File</span>
+                  <Download className="h-5 w-5 shrink-0 text-blue-400" />
+                  <span className="font-sans font-bold text-xs">Export Data</span>
+                  <span className="text-[8.5px] font-normal font-mono text-slate-500 leading-tight">JSON (.arcbackup)</span>
                 </button>
+
+                {/* Import Feature */}
+                <div className="col-span-1 relative">
+                  <input
+                    type="file"
+                    id="settings-import-data-file"
+                    accept=".arcbackup,.json,.pdf"
+                    onChange={handleBackupFileSelect}
+                    disabled={backupStatus === 'exporting' || backupStatus === 'importing' || backupStatus === 'import_verifying'}
+                    className="hidden"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => document.getElementById('settings-import-data-file')?.click()}
+                    disabled={backupStatus === 'exporting' || backupStatus === 'importing' || backupStatus === 'import_verifying'}
+                    className="w-full h-full px-3 py-3 bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white border border-white/5 hover:border-white/10 rounded-xl transition-all font-bold text-xs cursor-pointer flex flex-col items-center justify-center gap-1.5 text-center active:scale-97 shadow-sm disabled:opacity-50 disabled:pointer-events-none"
+                  >
+                    <Upload className="h-5 w-5 shrink-0 text-slate-400" />
+                    <span className="font-sans font-bold text-xs">Import Backup</span>
+                    <span className="text-[8.5px] font-normal font-mono text-slate-500 leading-tight">Restore State File</span>
+                  </button>
+                </div>
               </div>
-            </div>
+            )}
             
             <p className="text-[9px] text-slate-500 text-center italic leading-tight">
-              * Exports support both raw state archives and secure PDF-Polyglot containers built-in.
+              * Exports generate standard high-integrity `.arcbackup` files. Imports accept legacy direct JSON and PDF backup ledgers.
             </p>
           </div>
 

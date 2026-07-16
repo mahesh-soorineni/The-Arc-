@@ -2,6 +2,7 @@ import React from 'react';
 import { safeLocalStorage as localStorage } from '../utils/storage';
 import { motion } from 'motion/react';
 import { BookOpen, ShieldAlert, GraduationCap, ArrowRight } from 'lucide-react';
+import { getTodayDateString } from '../utils/rulesEngine';
 
 interface SplashScreenProps {
   tagline: string;
@@ -62,8 +63,7 @@ export function LoginScreen({ onOfflineBypass, error }: LoginScreenProps) {
       const stored = localStorage.getItem('the_arc_profile');
       if (stored) {
         const parsed = JSON.parse(stored);
-        // Only count as valid existing profile if they actually entered custom name
-        if (parsed && parsed.name && parsed.name !== 'SOORINENI MAHESH') {
+        if (parsed && parsed.name) {
           return parsed;
         }
       }
@@ -78,17 +78,17 @@ export function LoginScreen({ onOfflineBypass, error }: LoginScreenProps) {
     existingProfile ? 'welcome' : 'signup'
   );
 
-  // Sign up Form states
-  const [name, setName] = React.useState('');
-  const [collegeName, setCollegeName] = React.useState('');
-  const [rollNo, setRollNo] = React.useState('');
-  const [degree, setDegree] = React.useState('B.Tech');
-  const [branch, setBranch] = React.useState('');
-  const [semester, setSemester] = React.useState('');
-  const [email, setEmail] = React.useState('');
-  const [minAttendance, setMinAttendance] = React.useState(75);
-  const [semesterStartDate, setSemesterStartDate] = React.useState('2026-05-01');
-  const [semesterEndDate, setSemesterEndDate] = React.useState('2026-11-30');
+  // Sign up Form states - preloaded with existingProfile values if present
+  const [name, setName] = React.useState(existingProfile?.name || '');
+  const [collegeName, setCollegeName] = React.useState(existingProfile?.collegeName || '');
+  const [rollNo, setRollNo] = React.useState(existingProfile?.rollNo && existingProfile.rollNo !== 'N/A' ? existingProfile.rollNo : '');
+  const [degree, setDegree] = React.useState(existingProfile?.degree || existingProfile?.course || 'B.Tech');
+  const [branch, setBranch] = React.useState(existingProfile?.branch && existingProfile.branch !== 'General' ? existingProfile.branch : '');
+  const [semester, setSemester] = React.useState(existingProfile?.semester && existingProfile.semester !== 'I Semester' ? existingProfile.semester : '');
+  const [email, setEmail] = React.useState(existingProfile?.email && existingProfile.email !== 'student@thearc.io' ? existingProfile.email : '');
+  const [minAttendance, setMinAttendance] = React.useState(existingProfile?.minAttendance || 75);
+  const [semesterStartDate, setSemesterStartDate] = React.useState(existingProfile?.semesterStartDate || getTodayDateString());
+  const [semesterEndDate, setSemesterEndDate] = React.useState(existingProfile?.semesterEndDate || getTodayDateString());
   const [formError, setFormError] = React.useState('');
 
   const handlePrefillDemo = () => {
@@ -102,8 +102,8 @@ export function LoginScreen({ onOfflineBypass, error }: LoginScreenProps) {
       setSemester('');
       setEmail('');
       setMinAttendance(75);
-      setSemesterStartDate('2026-05-01');
-      setSemesterEndDate('2026-11-30');
+      setSemesterStartDate(getTodayDateString());
+      setSemesterEndDate(getTodayDateString());
     } else {
       setName('SOORINENI MAHESH');
       setCollegeName('K.S.R.M. College of Engineering');

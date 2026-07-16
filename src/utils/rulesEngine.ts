@@ -190,17 +190,9 @@ export function calculateAnalytics(
   records: AttendanceRecord[],
   subjects: Subject[],
   timetables: Timetable[],
-  minRequiredPercent: number = 75
+  minRequiredPercent: number = 75,
+  manualOverrides: Record<string, { conducted: number; attended: number; missed: number }> = {}
 ): AttendanceAnalytics {
-  let totalAttendedHours = 0;
-  let totalScheduledHours = 0;
-
-  let theoryAttended = 0;
-  let theoryScheduled = 0;
-
-  let labAttended = 0;
-  let labScheduled = 0;
-
   let presentDaysCount = 0;
   let absentDaysCount = 0;
   let holidayDaysCount = 0;
@@ -221,18 +213,21 @@ export function calculateAnalytics(
   // Safe check if standard map needs addition
   const getOrAddSubject = (code: string) => {
     if (!subjMap[code]) {
+      const isLab = code.toLowerCase().includes('lab') || code.toLowerCase().includes('_lab') || subjects.find(s => s.code === code)?.isLab || false;
       subjMap[code] = {
         code,
-        name: code,
+        name: subjects.find(s => s.code === code)?.name || code,
         attended: 0,
         total: 0,
-        isLab: code.toLowerCase().includes('lab'),
+        isLab,
       };
     }
     return subjMap[code];
   };
 
   records.forEach(r => {
+    const hasSlotDetails = r.slotsDetails && r.slotsDetails.length > 0;
+
     // Count days
     if (r.dayType === 'Holiday' || r.dayType === 'Festival' || r.dayType === 'SuddenHoliday' || r.dayType === 'CancelledClasses') {
       holidayDaysCount++;
@@ -240,11 +235,23 @@ export function calculateAnalytics(
       examDaysCount++;
     } else {
       // Regular or working days
-      if (r.scheduledHours > 0) {
-        if (r.attendedHours > 0) {
-          presentDaysCount++;
-        } else {
-          absentDaysCount++;
+      if (hasSlotDetails) {
+        const dayScheduled = r.slotsDetails!.reduce((sum, slot) => slot.status !== 'Cancelled' ? sum + slot.hours : sum, 0);
+        const dayAttended = r.slotsDetails!.reduce((sum, slot) => (slot.status !== 'Cancelled' && slot.isAttended) ? sum + slot.hours : sum, 0);
+        if (dayScheduled > 0) {
+          if (dayAttended > 0) {
+            presentDaysCount++;
+          } else {
+            absentDaysCount++;
+          }
+        }
+      } else {
+        if (r.scheduledHours > 0) {
+          if (r.attendedHours > 0) {
+            presentDaysCount++;
+          } else {
+            absentDaysCount++;
+          }
         }
       }
     }
@@ -254,9 +261,21 @@ export function calculateAnalytics(
       return;
     }
 
-    // Accumulate overall
-    totalAttendedHours += r.attendedHours;
-    totalScheduledHours += r.scheduledHours;
+    if (hasSlotDetails) {
+      r.slotsDetails!.forEach(slot => {
+        if (slot.status === 'Cancelled') {
+          return;
+        }
+
+        const s = getOrAddSubject(slot.subjectCode);
+        s.total += slot.hours;
+
+        if (slot.isAttended) {
+          s.attended += slot.hours;
+        }
+      });
+      return;
+    }
 
     // Load active timetable slot detail to allocate subjects
     const ttable = getTimetableForDate(r.date, timetables);
@@ -271,42 +290,21 @@ export function calculateAnalytics(
         const s = getOrAddSubject(slot.subjectCode);
         s.attended += slot.hours;
         s.total += slot.hours;
-
-        if (s.isLab) {
-          labAttended += slot.hours;
-          labScheduled += slot.hours;
-        } else {
-          theoryAttended += slot.hours;
-          theoryScheduled += slot.hours;
-        }
       });
     } else if (r.attendedHours === 0) {
       // Completely absent
       scheduledSlots.forEach(slot => {
         const s = getOrAddSubject(slot.subjectCode);
         s.total += slot.hours;
-
-        if (s.isLab) {
-          labScheduled += slot.hours;
-        } else {
-          theoryScheduled += slot.hours;
-        }
       });
     } else {
       // Partial Attendance log checking
-      let currentHandledAttended = 0;
-      
       // If there's an exact lab field stored
       if (r.labAttendance) {
         const labCode = r.labAttendance.subjectCode;
         const labObj = getOrAddSubject(labCode);
-        
         labObj.attended += r.labAttendance.attendedSlots;
         labObj.total += r.labAttendance.totalSlots;
-        labAttended += r.labAttendance.attendedSlots;
-        labScheduled += r.labAttendance.totalSlots;
-
-        currentHandledAttended += r.labAttendance.attendedSlots;
       }
 
       // Distribute remaining slots
@@ -320,27 +318,42 @@ export function calculateAnalytics(
         const s = getOrAddSubject(slot.subjectCode);
         s.total += slot.hours;
 
-        if (isMissed) {
-          // Missed this class
-          if (s.isLab) {
-            labScheduled += slot.hours;
-          } else {
-            theoryScheduled += slot.hours;
-          }
-        } else {
-          // Attended this class
+        if (!isMissed) {
           s.attended += slot.hours;
-          if (s.isLab) {
-            labAttended += slot.hours;
-            labScheduled += slot.hours;
-            currentHandledAttended += slot.hours;
-          } else {
-            theoryAttended += slot.hours;
-            theoryScheduled += slot.hours;
-            currentHandledAttended += slot.hours;
-          }
         }
       });
+    }
+  });
+
+  // Apply manual overrides before calculating totals
+  if (manualOverrides && Object.keys(manualOverrides).length > 0) {
+    Object.keys(manualOverrides).forEach(code => {
+      const override = manualOverrides[code];
+      const s = getOrAddSubject(code);
+      s.attended = override.attended;
+      s.total = override.conducted;
+    });
+  }
+
+  // Calculate overall and type-wise totals from subjMap
+  let totalAttendedHours = 0;
+  let totalScheduledHours = 0;
+  let theoryAttended = 0;
+  let theoryScheduled = 0;
+  let labAttended = 0;
+  let labScheduled = 0;
+
+  Object.keys(subjMap).forEach(code => {
+    const s = subjMap[code];
+    totalAttendedHours += s.attended;
+    totalScheduledHours += s.total;
+
+    if (s.isLab) {
+      labAttended += s.attended;
+      labScheduled += s.total;
+    } else {
+      theoryAttended += s.attended;
+      theoryScheduled += s.total;
     }
   });
 
@@ -363,9 +376,6 @@ export function calculateAnalytics(
   });
 
   // Calculated Safe Bunk limit (how many future hours we can bunk)
-  // Overall consecutive bunk limit:
-  // (A) / (T + B) >= (MinRequired / 100)
-  // B <= (A * 100 / MinRequired) - T
   const coef = minRequiredPercent / 100;
   let safeBunkHours = 0;
   if (overallPercentage >= minRequiredPercent && totalScheduledHours > 0) {
@@ -485,24 +495,51 @@ export function calculateRecoveryRequired(
 }
 
 /**
- * Format string date 'yyyy-mm-dd' to 'dd/mm/yyyy'
+ * Get today's date formatted as YYYY-MM-DD in the local timezone
+ */
+export function getTodayDateString(): string {
+  const d = new Date();
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+/**
+ * Format string date 'yyyy-mm-dd' to 'dd-mm-yyyy'
  */
 export function formatDateToDDMMYYYY(dateStr: string): string {
   if (!dateStr || !dateStr.includes('-')) return dateStr;
   const parts = dateStr.split('-');
   if (parts.length === 3) {
-    return `${parts[2]}/${parts[1]}/${parts[0]}`;
+    return `${parts[2]}-${parts[1]}-${parts[0]}`;
   }
   return dateStr;
 }
 
 /**
- * Format Date object to 'dd/mm/yyyy'
+ * Format Date object to 'dd-mm-yyyy'
  */
 export function formatDateObjToDDMMYYYY(date: Date): string {
   const d = String(date.getDate()).padStart(2, '0');
   const m = String(date.getMonth() + 1).padStart(2, '0');
   const y = date.getFullYear();
-  return `${d}/${m}/${y}`;
+  return `${d}-${m}-${y}`;
+}
+
+/**
+ * Dynamic Portal Context generation from Student Profile
+ */
+export function formatPortalContext(degree?: string, semester?: string): string {
+  const d = (degree || 'B.Tech').trim();
+  let s = (semester || 'VI').trim();
+  
+  // Normalize and clean "Semester" / "Sem" out of the semester string to avoid duplication.
+  s = s
+    .replace(/semester/i, '')
+    .replace(/sem/i, '')
+    .trim();
+    
+  return `${d} Sem ${s}`;
 }
 

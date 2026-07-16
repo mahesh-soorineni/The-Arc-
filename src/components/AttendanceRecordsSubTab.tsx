@@ -23,9 +23,18 @@ import { AttendanceRecord, Subject, Timetable, DayType, UserProfile } from '../t
 import {
   isAttendanceRequired,
   getDayOfWeekFromDate,
-  getTimetableForDate
+  getTimetableForDate,
+  getTodayDateString,
+  calculateAnalytics
 } from '../utils/rulesEngine';
-import { jsPDF } from 'jspdf';
+import {
+  exportLedgerPDF,
+  exportRegisterPDF,
+  exportLedgerExcel,
+  exportRegisterExcel,
+  exportLedgerCSV,
+  exportRegisterCSV
+} from '../utils/exportUtils';
 
 interface AttendanceRecordsSubTabProps {
   records: AttendanceRecord[];
@@ -33,6 +42,22 @@ interface AttendanceRecordsSubTabProps {
   timetables: Timetable[];
   currentDate: string;
   userProfile: UserProfile;
+  manualOverrides: Record<string, { conducted: number; attended: number; missed: number }>;
+  onUpdateManualOverrides: (newOverrides: Record<string, { conducted: number; attended: number; missed: number }>) => void;
+  reportMode: 'monthly' | 'custom' | 'till_now';
+  setReportMode: (mode: 'monthly' | 'custom' | 'till_now') => void;
+  selectedMonth: string;
+  setSelectedMonth: (month: string) => void;
+  selectedYear: string;
+  setSelectedYear: (year: string) => void;
+  fromDate: string;
+  setFromDate: (date: string) => void;
+  toDate: string;
+  setToDate: (date: string) => void;
+  excludeInactive: boolean;
+  setExcludeInactive: (exclude: boolean) => void;
+  isPrintLayout: boolean;
+  setIsPrintLayout: (isPrint: boolean) => void;
 }
 
 // Date Formatter Helper
@@ -40,7 +65,7 @@ export function formatRecordsDate(dateStr: string): string {
   if (!dateStr) return '';
   const parts = dateStr.split('-');
   if (parts.length !== 3) return dateStr;
-  return `${parts[2]}/${parts[1]}/${parts[0]}`;
+  return `${parts[2]}-${parts[1]}-${parts[0]}`;
 }
 
 export default function AttendanceRecordsSubTab({
@@ -48,30 +73,27 @@ export default function AttendanceRecordsSubTab({
   subjects,
   timetables,
   currentDate,
-  userProfile
+  userProfile,
+  manualOverrides,
+  onUpdateManualOverrides,
+  reportMode,
+  setReportMode,
+  selectedMonth,
+  setSelectedMonth,
+  selectedYear,
+  setSelectedYear,
+  fromDate,
+  setFromDate,
+  toDate,
+  setToDate,
+  excludeInactive,
+  setExcludeInactive,
+  isPrintLayout,
+  setIsPrintLayout
 }: AttendanceRecordsSubTabProps) {
+  const overrides = manualOverrides;
   // --- States ---
-  const [reportMode, setReportMode] = useState<'monthly' | 'custom' | 'till_now'>('monthly');
-  const [selectedMonth, setSelectedMonth] = useState<string>('06'); // June default
-  const [selectedYear, setSelectedYear] = useState<string>('2026'); // 2026 default
-  const [fromDate, setFromDate] = useState<string>(() => userProfile.semesterStartDate || '2026-05-01');
-  const [toDate, setToDate] = useState<string>(() => currentDate || '2026-06-12');
-  const [excludeInactive, setExcludeInactive] = useState<boolean>(false);
 
-  React.useEffect(() => {
-    if (userProfile.semesterStartDate) {
-      setFromDate(userProfile.semesterStartDate);
-    }
-  }, [userProfile.semesterStartDate]);
-
-  React.useEffect(() => {
-    if (currentDate) {
-      setToDate(currentDate);
-    }
-  }, [currentDate]);
-
-  // Print & PDF Layout Controls
-  const [isPrintLayout, setIsPrintLayout] = useState<boolean>(true);
   const pdfOrientation: 'portrait' | 'landscape' = 'portrait';
   const pdfTheme: any = 'monochrome';
   const pdfIncludeSubjectName = false;
@@ -94,14 +116,7 @@ export default function AttendanceRecordsSubTab({
   const [editAttended, setEditAttended] = useState<number>(0);
   const [editMissed, setEditMissed] = useState<number>(0);
 
-  const [overrides, setOverrides] = useState<Record<string, { conducted: number; attended: number; missed: number }>>(() => {
-    try {
-      const saved = localStorage.getItem('the_arc_manual_stats_overrides');
-      return saved ? JSON.parse(saved) : {};
-    } catch (e) {
-      return {};
-    }
-  });
+  // Manual Overrides are managed at top level in App.tsx
 
   const handleStartEdit = (row: any) => {
     setEditingRowCode(row.subjectCode);
@@ -119,8 +134,7 @@ export default function AttendanceRecordsSubTab({
         missed: editMissed
       }
     };
-    setOverrides(updated);
-    localStorage.setItem('the_arc_manual_stats_overrides', JSON.stringify(updated));
+    onUpdateManualOverrides(updated);
     setEditingRowCode(null);
     triggerFeedback(`Attendance stats updated for ${subjectCode}!`);
 
@@ -148,15 +162,9 @@ export default function AttendanceRecordsSubTab({
   // Auto-generate report initially
   useEffect(() => {
     generateReport(false);
-  }, [records, timetables, subjects]);
+  }, [records, timetables, subjects, manualOverrides]);
 
   const generateReport = (userTriggered: boolean = true) => {
-    // 1. Accumulate statistics subject-wise for records that match the selected filter range
-    const runningStats: Record<string, { conducted: number; attended: number; missed: number }> = {};
-    subjects.forEach(sub => {
-      runningStats[sub.code] = { conducted: 0, attended: 0, missed: 0 };
-    });
-
     const activePeriodRecords = records.filter(r => {
       if (!r.isMarked) return false;
       if (!isAttendanceRequired(r.dayType)) return false;
@@ -173,82 +181,31 @@ export default function AttendanceRecordsSubTab({
       return isInRange;
     });
 
-    activePeriodRecords.forEach(r => {
-      const ttable = getTimetableForDate(r.date, timetables);
-      if (!ttable) return;
-
-      const dayInfo = getDayOfWeekFromDate(r.date);
-      const scheduledSlots = ttable.slots[dayInfo.indexStr] || [];
-
-      if (r.attendedHours === r.scheduledHours) {
-        // Completely present
-        scheduledSlots.forEach(slot => {
-          const code = slot.subjectCode;
-          if (!runningStats[code]) {
-            runningStats[code] = { conducted: 0, attended: 0, missed: 0 };
-          }
-          runningStats[code].conducted += slot.hours;
-          runningStats[code].attended += slot.hours;
-        });
-      } else if (r.attendedHours === 0) {
-        // Completely absent
-        scheduledSlots.forEach(slot => {
-          const code = slot.subjectCode;
-          if (!runningStats[code]) {
-            runningStats[code] = { conducted: 0, attended: 0, missed: 0 };
-          }
-          runningStats[code].conducted += slot.hours;
-          runningStats[code].missed += slot.hours;
-        });
-      } else {
-        // Partial attendance distribution
-        if (r.labAttendance) {
-          const labCode = r.labAttendance.subjectCode;
-          if (!runningStats[labCode]) {
-            runningStats[labCode] = { conducted: 0, attended: 0, missed: 0 };
-          }
-          runningStats[labCode].conducted += r.labAttendance.totalSlots;
-          runningStats[labCode].attended += r.labAttendance.attendedSlots;
-          runningStats[labCode].missed += (r.labAttendance.totalSlots - r.labAttendance.attendedSlots);
-        }
-
-        scheduledSlots.forEach(slot => {
-          if (r.labAttendance && slot.subjectCode === r.labAttendance.subjectCode) {
-            return; // processed
-          }
-          const code = slot.subjectCode;
-          if (!runningStats[code]) {
-            runningStats[code] = { conducted: 0, attended: 0, missed: 0 };
-          }
-          runningStats[code].conducted += slot.hours;
-          const isMissed = r.missedClasses.includes(code);
-          if (isMissed) {
-            runningStats[code].missed += slot.hours;
-          } else {
-            runningStats[code].attended += slot.hours;
-          }
-        });
-      }
-    });
+    const analyticsResult = calculateAnalytics(
+      activePeriodRecords,
+      subjects,
+      timetables,
+      userProfile.minAttendance,
+      overrides
+    );
 
     const rows: any[] = [];
-    let currentOverrides = overrides;
-    try {
-      const saved = localStorage.getItem('the_arc_manual_stats_overrides');
-      if (saved) currentOverrides = JSON.parse(saved);
-    } catch (e) {}
-
     subjects.forEach(sub => {
-      const realStats = runningStats[sub.code] || { conducted: 0, attended: 0, missed: 0 };
-      const o = currentOverrides[sub.code] || realStats;
-      const pct = o.conducted > 0 ? (o.attended / o.conducted) * 100 : 0.00;
+      const subjectStat = analyticsResult.subjectWise[sub.code] || {
+        code: sub.code,
+        name: sub.name,
+        attended: 0,
+        total: 0,
+        percent: 0,
+      };
+      
       rows.push({
         subjectCode: sub.code,
         subjectName: sub.name,
-        conducted: o.conducted,
-        attended: o.attended,
-        missed: o.missed,
-        pct: parseFloat(pct.toFixed(2))
+        conducted: subjectStat.total,
+        attended: subjectStat.attended,
+        missed: subjectStat.total - subjectStat.attended,
+        pct: parseFloat(subjectStat.percent.toFixed(2))
       });
     });
 
@@ -324,69 +281,62 @@ export default function AttendanceRecordsSubTab({
   const totalMissed = filteredRows.reduce((sum, r) => sum + r.missed, 0);
   const overallPercentage = totalConducted > 0 ? (totalAttended / totalConducted) * 100 : 0.00;
 
+  const getActivePeriodRecords = () => {
+    return records.filter(r => {
+      if (!r.isMarked) return false;
+      if (!isAttendanceRequired(r.dayType)) return false;
+      if (r.date > currentDate) return false;
+
+      let isInRange = false;
+      if (reportMode === 'monthly') {
+        isInRange = r.date.startsWith(`${selectedYear}-${selectedMonth}`);
+      } else if (reportMode === 'custom') {
+        isInRange = r.date >= fromDate && r.date <= toDate;
+      } else { // till_now
+        isInRange = true;
+      }
+      return isInRange;
+    });
+  };
+
   // CSV Generator
   const triggerExportCSV = () => {
-    if (filteredRows.length === 0) {
-      alert('No data available to export.');
-      return;
-    }
-    const headers = ['Subject', 'Conducted', 'Attended', 'Missed', 'Attendance %'];
-    const rows = sortedRows.map(r => [
-      `${r.subjectCode} - ${r.subjectName}`,
-      r.conducted,
-      r.attended,
-      r.missed,
-      `${r.pct.toFixed(2)}%`
-    ]);
-
-    const csvContent = [headers, ...rows]
-      .map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
-      .join('\n');
-
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute('download', `ERP_Attendance_Records_${activeReportMode}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    triggerFeedback('CSV Records file downloaded! 📄');
+    exportLedgerCSV(
+      getActivePeriodRecords(),
+      subjects,
+      timetables,
+      userProfile,
+      activeReportRangeStr,
+      triggerFeedback
+    );
   };
 
   // Excel Generator
   const triggerExportExcel = () => {
-    if (filteredRows.length === 0) {
-      alert('No data available to export.');
-      return;
-    }
-    const headers = ['Subject Code', 'Subject Name', 'Conducted', 'Attended', 'Missed', 'Attendance %'];
-    const rows = sortedRows.map(r => [
-      r.subjectCode,
-      r.subjectName,
-      r.conducted,
-      r.attended,
-      r.missed,
-      `${r.pct.toFixed(2)}%`
-    ]);
-
-    const excelContent = [headers, ...rows]
-      .map(row => row.join('\t'))
-      .join('\n');
-
-    const blob = new Blob([excelContent], { type: 'application/vnd.ms-excel;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute('download', `ERP_Attendance_Records_${activeReportMode}.xls`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    triggerFeedback('Excel compatible spreadsheet ledger downloaded! 📊');
+    exportLedgerExcel(
+      getActivePeriodRecords(),
+      subjects,
+      timetables,
+      userProfile,
+      activeReportRangeStr,
+      triggerFeedback
+    );
   };
 
   // PDF print & direct jsPDF generation representation with university branding
   const handleExportPDF = () => {
+    exportLedgerPDF(
+      getActivePeriodRecords(),
+      subjects,
+      timetables,
+      userProfile,
+      activeReportRangeStr,
+      triggerFeedback
+    );
+  };
+
+  /*
+  const legacyExportPDF_Disabled = () => {
     if (sortedRows.length === 0) {
       alert('No data available to export.');
       return;
@@ -801,9 +751,16 @@ export default function AttendanceRecordsSubTab({
       doc.text("HOD / Academic Registrar Officio", sig3X + lineLength / 2, sigY + 4.5, { align: 'center' });
     }
 
-    doc.save(`KSRM_Attendance_Report_${activeReportMode}_${pdfOrientation}.pdf`);
-    triggerFeedback(`PDF Attendance Report (${pdfOrientation.toUpperCase()}) downloaded! 📄`);
+    const filename = `KSRM_Attendance_Report_${activeReportMode}_${pdfOrientation}.pdf`;
+    downloadOrSharePdf(doc, filename).then(res => {
+      if (res.shared) {
+        triggerFeedback(`PDF Attendance Report (${pdfOrientation.toUpperCase()}) shared! 📄`);
+      } else {
+        triggerFeedback(`PDF Attendance Report (${pdfOrientation.toUpperCase()}) downloaded! 📄`);
+      }
+    });
   };
+  */
 
   // Clipboard copy functions
   const triggerShareReportTable = () => {
@@ -1034,7 +991,7 @@ export default function AttendanceRecordsSubTab({
               {/* Google Docs style Print layout switch */}
               <button
                 type="button"
-                onClick={() => setIsPrintLayout(prev => !prev)}
+                onClick={() => setIsPrintLayout(!isPrintLayout)}
                 className={`px-3 py-1.5 rounded-lg border text-xs font-semibold flex items-center space-x-2.5 cursor-pointer transition ${
                   isPrintLayout 
                     ? 'bg-blue-600/15 border-blue-500/40 text-blue-200' 

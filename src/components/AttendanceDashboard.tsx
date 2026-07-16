@@ -8,6 +8,7 @@ import { FileCheck, ClipboardList, BookOpen, Layers } from 'lucide-react';
 import { AttendanceRecord, Subject, Timetable, UserProfile } from '../types';
 import AttendanceRecordsSubTab from './AttendanceRecordsSubTab';
 import AttendanceReportsSubTab from './AttendanceReportsSubTab';
+import { formatPortalContext } from '../utils/rulesEngine';
 
 interface AttendanceDashboardProps {
   records: AttendanceRecord[];
@@ -15,6 +16,8 @@ interface AttendanceDashboardProps {
   timetables: Timetable[];
   currentDate: string;
   userProfile: UserProfile;
+  manualOverrides: Record<string, { conducted: number; attended: number; missed: number }>;
+  onUpdateManualOverrides: (newOverrides: Record<string, { conducted: number; attended: number; missed: number }>) => void;
 }
 
 export default function AttendanceDashboard({
@@ -22,10 +25,37 @@ export default function AttendanceDashboard({
   subjects,
   timetables,
   currentDate,
-  userProfile
+  userProfile,
+  manualOverrides,
+  onUpdateManualOverrides
 }: AttendanceDashboardProps) {
   // Sub-tabs: 'records' | 'reports'
   const [subTab, setSubTab] = useState<'records' | 'reports'>('records');
+
+  // Lifted shared filter states for logs & reports synchronization
+  const [reportMode, setReportMode] = useState<'monthly' | 'custom' | 'till_now'>('monthly');
+  const [selectedMonth, setSelectedMonth] = useState<string>('06'); // June default
+  const [selectedYear, setSelectedYear] = useState<string>('2026'); // 2026 default
+  const [fromDate, setFromDate] = useState<string>(() => {
+    return userProfile?.semesterStartDate || '2026-05-15';
+  });
+  const [toDate, setToDate] = useState<string>(() => currentDate || '2026-07-15');
+  const [excludeInactive, setExcludeInactive] = useState<boolean>(false);
+  const [isPrintLayout, setIsPrintLayout] = useState<boolean>(true);
+
+  // Synchronize on currentDate change
+  React.useEffect(() => {
+    if (currentDate) {
+      setToDate(currentDate);
+    }
+  }, [currentDate]);
+
+  // Synchronize on userProfile semesterStartDate change
+  React.useEffect(() => {
+    if (userProfile?.semesterStartDate) {
+      setFromDate(userProfile.semesterStartDate);
+    }
+  }, [userProfile?.semesterStartDate]);
 
   return (
     <div className="space-y-6">
@@ -61,7 +91,7 @@ export default function AttendanceDashboard({
         </div>
 
         <div className="text-[9px] sm:text-[10px] w-fit font-mono text-slate-500 bg-slate-900/40 border border-white/[0.02] px-2 py-1 rounded-md self-end sm:self-auto">
-          Portal Context: B.Tech Sem VI
+          Portal Context: {formatPortalContext(userProfile.degree, userProfile.semester)}
         </div>
       </div>
 
@@ -75,6 +105,22 @@ export default function AttendanceDashboard({
             timetables={timetables}
             currentDate={currentDate}
             userProfile={userProfile}
+            manualOverrides={manualOverrides}
+            onUpdateManualOverrides={onUpdateManualOverrides}
+            reportMode={reportMode}
+            setReportMode={setReportMode}
+            selectedMonth={selectedMonth}
+            setSelectedMonth={setSelectedMonth}
+            selectedYear={selectedYear}
+            setSelectedYear={setSelectedYear}
+            fromDate={fromDate}
+            setFromDate={setFromDate}
+            toDate={toDate}
+            setToDate={setToDate}
+            excludeInactive={excludeInactive}
+            setExcludeInactive={setExcludeInactive}
+            isPrintLayout={isPrintLayout}
+            setIsPrintLayout={setIsPrintLayout}
           />
         ) : (
           <AttendanceReportsSubTab
@@ -83,6 +129,22 @@ export default function AttendanceDashboard({
             timetables={timetables}
             currentDate={currentDate}
             userProfile={userProfile}
+            manualOverrides={manualOverrides}
+            onUpdateManualOverrides={onUpdateManualOverrides}
+            reportMode={reportMode}
+            setReportMode={setReportMode}
+            selectedMonth={selectedMonth}
+            setSelectedMonth={setSelectedMonth}
+            selectedYear={selectedYear}
+            setSelectedYear={setSelectedYear}
+            fromDate={fromDate}
+            setFromDate={setFromDate}
+            toDate={toDate}
+            setToDate={setToDate}
+            excludeInactive={excludeInactive}
+            setExcludeInactive={setExcludeInactive}
+            isPrintLayout={isPrintLayout}
+            setIsPrintLayout={setIsPrintLayout}
           />
         )}
 

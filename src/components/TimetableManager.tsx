@@ -26,9 +26,10 @@ import {
 import {
   Subject,
   Timetable,
-  TimetableSlot
+  TimetableSlot,
+  UserProfile
 } from '../types';
-import { formatDateToDDMMYYYY } from '../utils/rulesEngine';
+import { formatDateToDDMMYYYY, getTodayDateString } from '../utils/rulesEngine';
 import { parseTextHeuristically } from '../utils/offlineParser';
 import Tesseract from 'tesseract.js';
 
@@ -97,6 +98,7 @@ interface TimetableManagerProps {
     semesterStartDate?: string;
     semesterEndDate?: string;
   }) => void;
+  userProfile?: UserProfile;
 }
 
 export default function TimetableManager({
@@ -107,7 +109,8 @@ export default function TimetableManager({
   onDeleteSubject,
   onReplaceTimetable,
   currentDate,
-  onImportTimetableAndProfile
+  onImportTimetableAndProfile,
+  userProfile
 }: TimetableManagerProps) {
   const [activeDayTab, setActiveDayTab] = useState<string>('1'); // Monday default
   const [isAddingSubject, setIsAddingSubject] = useState(false);
@@ -201,7 +204,7 @@ export default function TimetableManager({
     effectiveFrom: string;
     slots: Record<string, TimetableSlot[]>;
   }>({
-    effectiveFrom: currentDate || '2026-05-01',
+    effectiveFrom: currentDate || getTodayDateString(),
     slots: {
       '1': [], // Monday slots
       '2': [],
@@ -565,8 +568,8 @@ export default function TimetableManager({
     if (!importedData || !onImportTimetableAndProfile) return;
     onImportTimetableAndProfile({
       ...importedData,
-      semesterStartDate: confirmSemesterStart,
-      semesterEndDate: confirmSemesterEnd
+      semesterStartDate: userProfile?.semesterStartDate || confirmSemesterStart,
+      semesterEndDate: userProfile?.semesterEndDate || confirmSemesterEnd
     });
     setImportedData(null);
     setFile(null);
@@ -1051,31 +1054,19 @@ Friday: OS(1h), DBMS_LAB(3h)`;
 
               <div className="border-t border-slate-800/80 pt-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-[#0c1018]/60 p-3 rounded-lg border border-white/5">
                 <div className="space-y-0.5">
-                  <span className="text-[10px] font-bold text-blue-400 block flex items-center gap-1">🗓️ CONFIRM SEMESTER DATE BOUNDARIES</span>
+                  <span className="text-[10px] font-bold text-blue-400 block flex items-center gap-1">🗓️ SEMESTER DATE BOUNDARIES (CONFIRMED)</span>
                   <p className="text-[9.5px] text-slate-400 leading-normal">
-                    Attendance records and class slots will auto-allocate strictly between these start & end dates.
+                    Attendance records and class slots will auto-allocate strictly using your registered semester dates. Edit them in Profile Settings if needed.
                   </p>
                 </div>
-                <div className="flex items-center gap-2.5">
-                  <div className="space-y-1 shrink-0">
+                <div className="flex items-center gap-4">
+                  <div className="text-right shrink-0">
                     <span className="block text-[8px] uppercase font-mono tracking-wider text-slate-500 font-bold">Start Date</span>
-                    <input
-                      type="date"
-                      required
-                      value={confirmSemesterStart}
-                      onChange={(e) => setConfirmSemesterStart(e.target.value)}
-                      className="bg-black/50 border border-white/10 rounded px-2.5 py-1 text-[11px] font-mono text-white focus:outline-none focus:border-blue-500 transition cursor-pointer"
-                    />
+                    <span className="text-xs font-mono font-bold text-slate-200">{formatDateToDDMMYYYY(userProfile?.semesterStartDate || confirmSemesterStart)}</span>
                   </div>
-                  <div className="space-y-1 shrink-0">
+                  <div className="text-right shrink-0">
                     <span className="block text-[8px] uppercase font-mono tracking-wider text-slate-500 font-bold">End Date</span>
-                    <input
-                      type="date"
-                      required
-                      value={confirmSemesterEnd}
-                      onChange={(e) => setConfirmSemesterEnd(e.target.value)}
-                      className="bg-black/50 border border-white/10 rounded px-2.5 py-1 text-[11px] font-mono text-white focus:outline-none focus:border-blue-500 transition cursor-pointer"
-                    />
+                    <span className="text-xs font-mono font-bold text-slate-200">{formatDateToDDMMYYYY(userProfile?.semesterEndDate || confirmSemesterEnd)}</span>
                   </div>
                 </div>
               </div>
@@ -1304,7 +1295,9 @@ Friday: OS(1h), DBMS_LAB(3h)`;
           <div className="space-y-0.5">
             <div className="flex items-center space-x-2">
               <FileSpreadsheet className="h-4.5 w-4.5 text-slate-600" />
-              <h3 className="font-sans font-bold text-sm text-slate-900 tracking-tight">Hourly Class Schedule</h3>
+              <h3 className="font-sans font-bold text-sm text-slate-900 tracking-tight">
+                Hourly Class Schedule ({userProfile?.semester || 'Current Semester'})
+              </h3>
             </div>
             <p className="text-[10px] font-mono text-slate-400">
               Active version effective from: <span className="font-bold text-slate-600">{formatDateToDDMMYYYY(latestTimetable?.effectiveFrom || '2026-05-01')}</span>

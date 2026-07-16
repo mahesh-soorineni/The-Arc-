@@ -15,15 +15,25 @@ import {
   HelpCircle,
   FileText,
   Activity,
-  Layers
+  Layers,
+  Share2,
+  CheckCircle,
+  Eye,
+  ChevronRight
 } from 'lucide-react';
 import { AttendanceRecord, Subject, Timetable, UserProfile } from '../types';
 import {
   isAttendanceRequired,
   getDayOfWeekFromDate,
-  getTimetableForDate
+  getTimetableForDate,
+  getTodayDateString,
+  calculateAnalytics
 } from '../utils/rulesEngine';
-import { jsPDF } from 'jspdf';
+import {
+  exportRegisterPDF,
+  exportRegisterExcel,
+  exportRegisterCSV
+} from '../utils/exportUtils';
 
 interface AttendanceReportsSubTabProps {
   records: AttendanceRecord[];
@@ -31,6 +41,22 @@ interface AttendanceReportsSubTabProps {
   timetables: Timetable[];
   currentDate: string;
   userProfile: UserProfile;
+  manualOverrides: Record<string, { conducted: number; attended: number; missed: number }>;
+  onUpdateManualOverrides: (newOverrides: Record<string, { conducted: number; attended: number; missed: number }>) => void;
+  reportMode: 'monthly' | 'custom' | 'till_now';
+  setReportMode: React.Dispatch<React.SetStateAction<'monthly' | 'custom' | 'till_now'>>;
+  selectedMonth: string;
+  setSelectedMonth: React.Dispatch<React.SetStateAction<string>>;
+  selectedYear: string;
+  setSelectedYear: React.Dispatch<React.SetStateAction<string>>;
+  fromDate: string;
+  setFromDate: React.Dispatch<React.SetStateAction<string>>;
+  toDate: string;
+  setToDate: React.Dispatch<React.SetStateAction<string>>;
+  excludeInactive: boolean;
+  setExcludeInactive: React.Dispatch<React.SetStateAction<boolean>>;
+  isPrintLayout: boolean;
+  setIsPrintLayout: React.Dispatch<React.SetStateAction<boolean>>;
 }
 
 // Date Formatter Helper
@@ -38,7 +64,7 @@ export function formatRegisterDate(dateStr: string): string {
   if (!dateStr) return '';
   const parts = dateStr.split('-');
   if (parts.length !== 3) return dateStr;
-  return `${parts[2]}/${parts[1]}/${parts[0]}`;
+  return `${parts[2]}-${parts[1]}-${parts[0]}`;
 }
 
 export default function AttendanceReportsSubTab({
@@ -46,27 +72,25 @@ export default function AttendanceReportsSubTab({
   subjects,
   timetables,
   currentDate,
-  userProfile
+  userProfile,
+  manualOverrides,
+  onUpdateManualOverrides,
+  reportMode,
+  setReportMode,
+  selectedMonth,
+  setSelectedMonth,
+  selectedYear,
+  setSelectedYear,
+  fromDate,
+  setFromDate,
+  toDate,
+  setToDate,
+  excludeInactive,
+  setExcludeInactive,
+  isPrintLayout,
+  setIsPrintLayout
 }: AttendanceReportsSubTabProps) {
-  // --- States ---
-  const [reportMode, setReportMode] = useState<'monthly' | 'custom' | 'till_now'>('monthly');
-  const [selectedMonth, setSelectedMonth] = useState<string>('06'); // June default
-  const [selectedYear, setSelectedYear] = useState<string>('2026'); // 2026 default
-  const [fromDate, setFromDate] = useState<string>(() => userProfile.semesterStartDate || '2026-05-01');
-  const [toDate, setToDate] = useState<string>(() => currentDate || '2026-06-12');
-  const [excludeInactive, setExcludeInactive] = useState<boolean>(false);
-
-  React.useEffect(() => {
-    if (userProfile.semesterStartDate) {
-      setFromDate(userProfile.semesterStartDate);
-    }
-  }, [userProfile.semesterStartDate]);
-
-  React.useEffect(() => {
-    if (currentDate) {
-      setToDate(currentDate);
-    }
-  }, [currentDate]);
+  const overrides = manualOverrides;
 
   const [feedback, setFeedback] = useState<string>('');
 
@@ -76,14 +100,7 @@ export default function AttendanceReportsSubTab({
   const [editAttended, setEditAttended] = useState<number>(0);
   const [editMissed, setEditMissed] = useState<number>(0);
 
-  const [overrides, setOverrides] = useState<Record<string, { conducted: number; attended: number; missed: number }>>(() => {
-    try {
-      const saved = localStorage.getItem('the_arc_manual_stats_overrides');
-      return saved ? JSON.parse(saved) : {};
-    } catch (e) {
-      return {};
-    }
-  });
+  // Overrides are managed at App.tsx level
 
   const handleStartEdit = (subjectCode: string, stats: any) => {
     setEditingCode(subjectCode);
@@ -101,8 +118,7 @@ export default function AttendanceReportsSubTab({
         missed: editMissed
       }
     };
-    setOverrides(updated);
-    localStorage.setItem('the_arc_manual_stats_overrides', JSON.stringify(updated));
+    onUpdateManualOverrides(updated);
     setEditingCode(null);
     setFeedback(`Successfully updated override for ${subjectCode}!`);
     setTimeout(() => setFeedback(''), 3000);
@@ -132,19 +148,36 @@ export default function AttendanceReportsSubTab({
     return dates;
   })();
 
-  // Format date header like inside screenshot (e.g. "15/12", "02/01")
+  // Format date header like inside screenshot (e.g. "15-12", "02-01")
   const formatDateHeader = (dateStr: string): string => {
     const parts = dateStr.split('-');
     if (parts.length !== 3) return dateStr;
     const month = parts[1];
     const day = parts[2];
-    return `${day}/${month}`;
+    return `${day}-${month}`;
   };
 
   // Compile map of attendance status for cell: (subjectCode, date) -> string (e.g. "P", "A A", "-")
   const getCellAttendanceStatus = (subjectCode: string, dateStr: string): string => {
     const r = records.find(record => record.date === dateStr);
     if (!r || !r.isMarked) return '-';
+
+    if (r.slotsDetails && r.slotsDetails.length > 0) {
+      const matchSlots = r.slotsDetails.filter(s => s.subjectCode === subjectCode);
+      if (matchSlots.length === 0) return '-';
+
+      const indicators: string[] = [];
+      matchSlots.forEach(s => {
+        if (s.status === 'Cancelled') {
+          indicators.push('C'); // Cancelled/Dismissed
+        } else if (s.isAttended) {
+          indicators.push('P');
+        } else {
+          indicators.push('A');
+        }
+      });
+      return indicators.join(' ');
+    }
 
     const ttable = getTimetableForDate(dateStr, timetables);
     if (!ttable) return '-';
@@ -184,100 +217,44 @@ export default function AttendanceReportsSubTab({
     }
   };
 
-  // Compile running stats based on active period records
-  const runningStats = (() => {
-    const stats: Record<string, { conducted: number; attended: number; missed: number }> = {};
-    subjects.forEach(sub => {
-      stats[sub.code] = { conducted: 0, attended: 0, missed: 0 };
-    });
+  const activePeriodRecords = records.filter(r => {
+    if (!r.isMarked) return false;
+    if (!isAttendanceRequired(r.dayType)) return false;
+    if (r.date > currentDate) return false; // Prevent simulated future records from ever counting
 
-    const activePeriodRecords = records.filter(r => {
-      if (!r.isMarked) return false;
-      if (!isAttendanceRequired(r.dayType)) return false;
-      if (r.date > currentDate) return false; // Prevent simulated future records from ever counting
+    let isInRange = false;
+    if (reportMode === 'monthly') {
+      isInRange = r.date.startsWith(`${selectedYear}-${selectedMonth}`);
+    } else if (reportMode === 'custom') {
+      isInRange = r.date >= fromDate && r.date <= toDate;
+    } else { // till_now
+      isInRange = true; // since r.date <= currentDate is already guaranteed by the check above
+    }
+    return isInRange;
+  });
 
-      let isInRange = false;
-      if (reportMode === 'monthly') {
-        isInRange = r.date.startsWith(`${selectedYear}-${selectedMonth}`);
-      } else if (reportMode === 'custom') {
-        isInRange = r.date >= fromDate && r.date <= toDate;
-      } else { // till_now
-        isInRange = true; // since r.date <= currentDate is already guaranteed by the check above
-      }
-      return isInRange;
-    });
-
-    activePeriodRecords.forEach(r => {
-      const ttable = getTimetableForDate(r.date, timetables);
-      if (!ttable) return;
-
-      const dayInfo = getDayOfWeekFromDate(r.date);
-      const scheduledSlots = ttable.slots[dayInfo.indexStr] || [];
-
-      if (r.attendedHours === r.scheduledHours) {
-        // Completely present
-        scheduledSlots.forEach(slot => {
-          const code = slot.subjectCode;
-          if (!stats[code]) {
-            stats[code] = { conducted: 0, attended: 0, missed: 0 };
-          }
-          stats[code].conducted += slot.hours;
-          stats[code].attended += slot.hours;
-        });
-      } else if (r.attendedHours === 0) {
-        // Completely absent
-        scheduledSlots.forEach(slot => {
-          const code = slot.subjectCode;
-          if (!stats[code]) {
-            stats[code] = { conducted: 0, attended: 0, missed: 0 };
-          }
-          stats[code].conducted += slot.hours;
-          stats[code].missed += slot.hours;
-        });
-      } else {
-        // Partial attendance distribution
-        if (r.labAttendance) {
-          const labCode = r.labAttendance.subjectCode;
-          if (!stats[labCode]) {
-            stats[labCode] = { conducted: 0, attended: 0, missed: 0 };
-          }
-          stats[labCode].conducted += r.labAttendance.totalSlots;
-          stats[labCode].attended += r.labAttendance.attendedSlots;
-          stats[labCode].missed += (r.labAttendance.totalSlots - r.labAttendance.attendedSlots);
-        }
-
-        scheduledSlots.forEach(slot => {
-          if (r.labAttendance && slot.subjectCode === r.labAttendance.subjectCode) {
-            return; // processed
-          }
-          const code = slot.subjectCode;
-          if (!stats[code]) {
-            stats[code] = { conducted: 0, attended: 0, missed: 0 };
-          }
-          stats[code].conducted += slot.hours;
-          const isMissed = r.missedClasses.includes(code);
-          if (isMissed) {
-            stats[code].missed += slot.hours;
-          } else {
-            stats[code].attended += slot.hours;
-          }
-        });
-      }
-    });
-
-    return stats;
-  })();
+  const analyticsResult = calculateAnalytics(
+    activePeriodRecords,
+    subjects,
+    timetables,
+    userProfile.minAttendance,
+    overrides
+  );
 
   // Compile row totals statistics based on active range
   const getSubjectStats = (subjectCode: string) => {
-    const realStat = runningStats[subjectCode] || { conducted: 0, attended: 0, missed: 0 };
-    const override = overrides[subjectCode] || realStat;
-    const pct = override.conducted > 0 ? (override.attended / override.conducted) * 100 : 0.00;
+    const subjectStat = analyticsResult.subjectWise[subjectCode] || {
+      code: subjectCode,
+      name: subjectCode,
+      attended: 0,
+      total: 0,
+      percent: 0,
+    };
     return {
-      conducted: override.conducted,
-      attended: override.attended,
-      missed: override.missed,
-      percent: parseFloat(pct.toFixed(2))
+      conducted: subjectStat.total,
+      attended: subjectStat.attended,
+      missed: subjectStat.total - subjectStat.attended,
+      percent: parseFloat(subjectStat.percent.toFixed(2))
     };
   };
 
@@ -294,289 +271,72 @@ export default function AttendanceReportsSubTab({
   const totalMissed = renderedSubjects.reduce((sum, sub) => sum + getSubjectStats(sub.code).missed, 0);
   const overallPercentage = totalConducted > 0 ? (totalAttended / totalConducted) * 100 : 0.00;
 
+  const triggerFeedback = (msg: string) => {
+    setFeedback(msg);
+    setTimeout(() => setFeedback(''), 4000);
+  };
+
+  const getActivePeriodRecords = () => {
+    return records.filter(r => {
+      if (!r.isMarked) return false;
+      if (!isAttendanceRequired(r.dayType)) return false;
+      if (r.date > currentDate) return false;
+
+      let isInRange = false;
+      if (reportMode === 'monthly') {
+        isInRange = r.date.startsWith(`${selectedYear}-${selectedMonth}`);
+      } else if (reportMode === 'custom') {
+        isInRange = r.date >= fromDate && r.date <= toDate;
+      } else { // till_now
+        isInRange = true;
+      }
+      return isInRange;
+    });
+  };
+
   // Export Academic Register Grid & Totals to CSV
   const triggerExportCSV = () => {
-    const headers = [
-      'SI.No',
-      'Subject Code',
-      'Subject Name',
-      ...visibleDates,
-      'Conducted',
-      'Attended',
-      'Missed',
-      'Attendance %'
-    ];
-    const rows = renderedSubjects.map((sub, i) => {
-      const stats = getSubjectStats(sub.code);
-      const rowData = [
-        String(i + 1),
-        sub.code,
-        sub.name,
-        ...visibleDates.map(date => getCellAttendanceStatus(sub.code, date)),
-        String(stats.conducted),
-        String(stats.attended),
-        String(stats.missed),
-        `${stats.percent.toFixed(2)}%`
-      ];
-      return rowData;
-    });
+    exportRegisterCSV(
+      getActivePeriodRecords(),
+      subjects,
+      timetables,
+      userProfile,
+      getActiveRangeStr(),
+      excludeInactive,
+      currentDate,
+      visibleDates,
+      triggerFeedback
+    );
+  };
 
-    const csvContent = [headers, ...rows]
-      .map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
-      .join('\n');
-
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute('download', `Academic_Register_${reportMode}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    
-    setFeedback('Academic Register CSV exported successfully! 📄');
-    setTimeout(() => setFeedback(''), 3000);
+  // Export Academic Register Grid & Totals to Excel
+  const triggerExportExcel = () => {
+    exportRegisterExcel(
+      getActivePeriodRecords(),
+      subjects,
+      timetables,
+      userProfile,
+      getActiveRangeStr(),
+      excludeInactive,
+      currentDate,
+      visibleDates,
+      triggerFeedback
+    );
   };
 
   // High-fidelity landscape PDF generator for Academic Register
   const handleExportPDF = () => {
-    if (renderedSubjects.length === 0) {
-      alert('No subject data to export.');
-      return;
-    }
-
-    const doc = new jsPDF({
-      orientation: 'landscape',
-      unit: 'mm',
-      format: 'a4'
-    });
-
-    const pageWidth = 297;
-    const pageHeight = 210;
-    const margin = 12;
-    const contentWidth = pageWidth - 2 * margin; // 273 mm
-
-    let y = 14;
-
-    // --- Header ---
-    doc.setFont('Helvetica', 'bold');
-    doc.setFontSize(14.5);
-    doc.setTextColor('#075985');
-    doc.text((userProfile.collegeName || 'COLLEGE').toUpperCase(), pageWidth / 2, y, { align: 'center' });
-    y += 5;
-
-    // Line Divider
-    doc.setDrawColor('#94A3B8');
-    doc.setLineWidth(0.4);
-    doc.line(margin, y, pageWidth - margin, y);
-    y += 6;
-
-    // Title
-    doc.setFont('Helvetica', 'bold');
-    doc.setFontSize(11);
-    doc.setTextColor('#0F172A');
-    doc.text('ACADEMIC REGISTER & ATTENDANCE LEDGER', pageWidth / 2, y, { align: 'center' });
-    y += 7;
-
-    // Student Registry Info
-    doc.setFont('Helvetica', 'bold');
-    doc.setFontSize(8.5);
-    doc.setTextColor('#334155');
-
-    const col1X = margin + 10;
-    const col2X = pageWidth / 2 + 10;
-
-    doc.text(`Student Name : ${userProfile.name.toUpperCase()}`, col1X, y);
-    doc.text(`Degree : ${userProfile.degree.toUpperCase()}`, col2X, y);
-    y += 4.5;
-
-    doc.text(`RollNo : ${userProfile.rollNo || 'N/A'}`, col1X, y);
-    doc.text(`Branch : ${userProfile.branch || 'N/A'}`, col2X, y);
-    y += 4.5;
-
-    doc.text(`Email Address : ${userProfile.email || 'N/A'}`, col1X, y);
-    doc.text(`Semester : ${userProfile.semester || 'N/A'}`, col2X, y);
-    y += 4.5;
-
-    const scopeLabelStr = getActiveRangeStr();
-    doc.text(`Scope Register : ${scopeLabelStr.toUpperCase()}`, col2X, y);
-    y += 8;
-
-    // --- Table Headers ---
-    const colSlNoX = margin;
-    const colSubjectX = margin + 10;
-    const dateStartColX = margin + 50;
-    const rightColsStartX = 200;
-
-    const N = Math.max(1, visibleDates.length);
-    const dateColWidth = 138 / N;
-
-    // Draw header box
-    doc.setFillColor('#E2E8F0');
-    doc.setDrawColor('#94A3B8');
-    doc.setLineWidth(0.35);
-    doc.rect(margin, y, contentWidth, 7.5, 'FD');
-
-    doc.setFont('Helvetica', 'bold');
-    doc.setFontSize(7.5);
-    doc.setTextColor('#1E293B');
-
-    doc.text('Sl.No.', colSlNoX + 5, y + 4.8, { align: 'center' });
-    doc.text('Subject Description', colSubjectX + 3, y + 4.8);
-
-    // Date headers
-    visibleDates.forEach((d, idx) => {
-      const cellX = dateStartColX + (idx * dateColWidth);
-      doc.text(formatDateHeader(d), cellX + dateColWidth / 2, y + 4.8, { align: 'center' });
-    });
-
-    // Right-aligned summary headers
-    doc.text('Held', rightColsStartX + 9, y + 4.8, { align: 'center' });
-    doc.text('Attend', rightColsStartX + 27, y + 4.8, { align: 'center' });
-    doc.text('Missed', rightColsStartX + 45, y + 4.8, { align: 'center' });
-    doc.text('%', rightColsStartX + 63, y + 4.8, { align: 'center' });
-
-    y += 7.5;
-
-    // Rows
-    renderedSubjects.forEach((sub, rowIdx) => {
-      const stats = getSubjectStats(sub.code);
-
-      // Draw row rect border
-      doc.setDrawColor('#CBD5E1');
-      doc.setLineWidth(0.25);
-      doc.rect(margin, y, contentWidth, 7, 'D');
-
-      // Vertical grid separators
-      doc.line(colSubjectX, y, colSubjectX, y + 7);
-      doc.line(dateStartColX, y, dateStartColX, y + 7);
-      doc.line(rightColsStartX, y, rightColsStartX, y + 7);
-      doc.line(rightColsStartX + 18, y, rightColsStartX + 18, y + 7);
-      doc.line(rightColsStartX + 36, y, rightColsStartX + 36, y + 7);
-      doc.line(rightColsStartX + 54, y, rightColsStartX + 54, y + 7);
-
-      doc.setFont('Helvetica', 'normal');
-      doc.setFontSize(7.5);
-      doc.setTextColor('#334155');
-
-      doc.text(String(rowIdx + 1), colSlNoX + 5, y + 4.8, { align: 'center' });
-      
-      // show code in bold
-      doc.setFont('Helvetica', 'bold');
-      doc.setTextColor('#0284C7');
-      doc.text(sub.code, colSubjectX + 2, y + 4.8);
-
-      // Print status letters
-      visibleDates.forEach((d, dIdx) => {
-        const val = getCellAttendanceStatus(sub.code, d);
-        const cellX = dateStartColX + (dIdx * dateColWidth);
-
-        // draw cell divider
-        if (dIdx > 0) {
-          doc.line(cellX, y, cellX, y + 7);
-        }
-
-        if (val.includes('P')) {
-          doc.setTextColor('#059669');
-          doc.setFont('Helvetica', 'bold');
-        } else if (val.includes('A')) {
-          doc.setTextColor('#DC2626');
-          doc.setFont('Helvetica', 'bold');
-        } else {
-          doc.setTextColor('#94A3B8');
-          doc.setFont('Helvetica', 'normal');
-        }
-        doc.text(val, cellX + dateColWidth / 2, y + 4.8, { align: 'center' });
-      });
-
-      doc.setFont('Helvetica', 'normal');
-      doc.setTextColor('#334155');
-
-      // Right summaries
-      // Conducted
-      doc.text(String(stats.conducted), rightColsStartX + 9, y + 4.8, { align: 'center' });
-      // Attended
-      doc.setTextColor('#059669');
-      doc.text(String(stats.attended), rightColsStartX + 27, y + 4.8, { align: 'center' });
-      // Missed
-      doc.setTextColor('#DC2626');
-      doc.text(String(stats.missed), rightColsStartX + 45, y + 4.8, { align: 'center' });
-      // %
-      doc.setTextColor(stats.percent >= 75 ? '#059669' : '#DC2626');
-      doc.setFont('Helvetica', 'bold');
-      doc.text(`${stats.percent.toFixed(2)}%`, rightColsStartX + 63, y + 4.8, { align: 'center' });
-
-      y += 7;
-    });
-
-    // TOTAL Row
-    doc.setFillColor('#E2E8F0');
-    doc.setDrawColor('#94A3B8');
-    doc.rect(margin, y, contentWidth, 7, 'FD');
-    doc.line(colSubjectX, y, colSubjectX, y + 7);
-    doc.line(dateStartColX, y, dateStartColX, y + 7);
-    doc.line(rightColsStartX, y, rightColsStartX, y + 7);
-    doc.line(rightColsStartX + 18, y, rightColsStartX + 18, y + 7);
-    doc.line(rightColsStartX + 36, y, rightColsStartX + 36, y + 7);
-    doc.line(rightColsStartX + 54, y, rightColsStartX + 54, y + 7);
-
-    doc.setFont('Helvetica', 'bold');
-    doc.setFontSize(8);
-    doc.setTextColor('#0F172A');
-
-    doc.text('TOTAL', dateStartColX - 5, y + 4.8, { align: 'right' });
-    doc.text(String(totalConducted), rightColsStartX + 9, y + 4.8, { align: 'center' });
-    doc.text(String(totalAttended), rightColsStartX + 27, y + 4.8, { align: 'center' });
-    doc.text(String(totalMissed), rightColsStartX + 45, y + 4.8, { align: 'center' });
-    doc.text(`${overallPercentage.toFixed(2)}%`, rightColsStartX + 63, y + 4.8, { align: 'center' });
-
-    y += 12;
-
-    // --- Dynamic overall totals bottom summary block ---
-    doc.setFont('Helvetica', 'bold');
-    doc.setFontSize(9);
-    doc.setTextColor('#0F172A');
-    doc.text('CUMULATIVE STRENGTH SUMMARY OVERALL', margin, y);
-    y += 5.5;
-
-    doc.setFont('Helvetica', 'normal');
-    doc.setFontSize(8.5);
-    doc.setTextColor('#334155');
-
-    const sumLabelX = margin + 5;
-    const sumColonX = margin + 42;
-    const sumValueX = margin + 45;
-
-    doc.text('Total conducted classes', sumLabelX, y);
-    doc.text(':', sumColonX, y);
-    doc.setFont('Helvetica', 'bold');
-    doc.text(String(totalConducted), sumValueX, y);
-    y += 5;
-
-    doc.setFont('Helvetica', 'normal');
-    doc.text('Total Attend hours', sumLabelX, y);
-    doc.text(':', sumColonX, y);
-    doc.setFont('Helvetica', 'bold');
-    doc.text(String(totalAttended), sumValueX, y);
-    y += 5;
-
-    doc.setFont('Helvetica', 'normal');
-    doc.text('Total missed hours', sumLabelX, y);
-    doc.text(':', sumColonX, y);
-    doc.setFont('Helvetica', 'bold');
-    doc.text(String(totalMissed), sumValueX, y);
-    y += 5;
-
-    doc.setFont('Helvetica', 'normal');
-    doc.text('Overall attendance', sumLabelX, y);
-    doc.text(':', sumColonX, y);
-    doc.setFont('Helvetica', 'bold');
-    doc.text(`${overallPercentage.toFixed(2)}%`, sumValueX, y);
-
-    const cleanName = userProfile.name.toLowerCase().replace(/\s+/g, '_');
-    doc.save(`KSRM_Academic_Register_${cleanName}_${reportMode}.pdf`);
-    setFeedback('Academic Register PDF downloaded successfully! 📄');
-    setTimeout(() => setFeedback(''), 3000);
+    exportRegisterPDF(
+      getActivePeriodRecords(),
+      subjects,
+      timetables,
+      userProfile,
+      getActiveRangeStr(),
+      excludeInactive,
+      currentDate,
+      visibleDates,
+      triggerFeedback
+    );
   };
 
   // Get active range label
@@ -777,22 +537,80 @@ export default function AttendanceReportsSubTab({
             </div>
           </div>
 
-          <div className="flex items-center space-x-2 print:hidden">
+          <div className="flex items-center flex-wrap gap-2.5 print:hidden">
+            {/* Google Docs style Print layout switch */}
+            <button
+              type="button"
+              onClick={() => setIsPrintLayout(!isPrintLayout)}
+              className={`px-3 py-1.5 rounded-lg border text-xs font-semibold flex items-center space-x-2.5 cursor-pointer transition ${
+                isPrintLayout 
+                  ? 'bg-blue-600/15 border-blue-500/40 text-blue-200' 
+                  : 'bg-[#161B22] border-white/5 text-slate-400 hover:text-white'
+              }`}
+            >
+              {/* Switch indicator */}
+              <span className="relative flex h-3 w-6 items-center rounded-full bg-slate-700 transition">
+                <span className={`h-2 w-2 rounded-full bg-white transition-all ${isPrintLayout ? 'translate-x-3 bg-blue-400' : 'translate-x-1'}`} />
+              </span>
+              <span>Print layout</span>
+            </button>
+
+            <div className="h-5 w-[1px] bg-white/5 hidden sm:block mx-1" />
+
             <button
               onClick={handleExportPDF}
-              className="px-3 py-1.5 bg-[#161B22] border border-white/5 rounded-lg text-xs font-bold text-slate-300 hover:text-white transition flex items-center space-x-1.5 cursor-pointer"
-              title="Download register as PDF"
+              className="px-2.5 py-1.5 bg-[#161B22] hover:bg-slate-800 text-slate-300 border border-white/5 rounded-lg text-xs font-semibold transition flex items-center space-x-1 cursor-pointer"
+              title="Download Beautiful PDF Register"
             >
               <FileText className="h-3.5 w-3.5 text-blue-400" />
               <span>PDF Register</span>
             </button>
+
+            <button
+              onClick={triggerExportExcel}
+              className="px-2.5 py-1.5 bg-[#161B22] hover:bg-slate-800 text-slate-300 border border-white/5 rounded-lg text-xs font-semibold transition flex items-center space-x-1 cursor-pointer"
+              title="Export Register Excel Sheet"
+            >
+              <Download className="h-3.5 w-3.5 text-emerald-400" />
+              <span>Excel Register</span>
+            </button>
+
             <button
               onClick={triggerExportCSV}
-              className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 rounded-lg text-xs font-bold text-white transition flex items-center space-x-1.5 cursor-pointer"
+              className="px-2.5 py-1.5 bg-[#161B22] hover:bg-slate-800 text-slate-300 border border-white/5 rounded-lg text-xs font-semibold transition flex items-center space-x-1 cursor-pointer"
+              title="Download CSV register spreadsheet"
             >
-              <Download className="h-3.5 w-3.5" />
-              <span>Export Ledger</span>
+              <Download className="h-3.5 w-3.5 text-amber-500" />
+              <span>CSV Register</span>
             </button>
+
+            <div className="h-5 w-[1px] bg-white/5 mx-1" />
+
+            <div className="relative group">
+              <button className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-bold transition flex items-center space-x-1 cursor-pointer">
+                <Share2 className="h-3.5 w-3.5" />
+                <span>Share Register</span>
+              </button>
+              <div className="absolute right-0 top-full mt-1 bg-slate-900 border border-white/10 rounded-xl p-1.5 shadow-2xl hidden group-hover:block z-50 w-44">
+                <button
+                  onClick={() => {
+                    if (navigator.share) {
+                      navigator.share({
+                        title: 'Academic Register',
+                        text: `Check out my Academic Register Attendance Grid for ${userProfile.name} (${getActiveRangeStr()})`
+                      }).then(() => triggerFeedback('Register shared successfully!'))
+                        .catch(() => triggerFeedback('Share cancelled'));
+                    } else {
+                      navigator.clipboard.writeText(`Academic Register Attendance Grid for ${userProfile.name} (${getActiveRangeStr()})`);
+                      triggerFeedback('Copied register share link to clipboard!');
+                    }
+                  }}
+                  className="w-full text-left px-2.5 py-1.5 hover:bg-white/5 text-[11px] text-slate-200 font-bold transition rounded-lg"
+                >
+                  📋 Register Grid Info
+                </button>
+              </div>
+            </div>
           </div>
         </div>
 

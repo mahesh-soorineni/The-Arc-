@@ -39,7 +39,8 @@ import {
   AcademicCalendarItem,
   SpecialDayOverride,
   AttendanceRecord,
-  UserProfile
+  UserProfile,
+  SlotDetail
 } from './types';
 import {
   INITIAL_SUBJECTS,
@@ -50,7 +51,7 @@ import {
   EMPTY_USER_PROFILE,
   generatePrepopulatedAttendance
 } from './utils/mockData';
-import { getPendingUnmarkedDays, determineDayType, isAttendanceRequired, getTimetableForDate, formatDateToDDMMYYYY } from './utils/rulesEngine';
+import { getPendingUnmarkedDays, determineDayType, isAttendanceRequired, getTimetableForDate, formatDateToDDMMYYYY, getTodayDateString, formatDateObjToDDMMYYYY } from './utils/rulesEngine';
 import { generateUnifiedBackupPdf } from './utils/pdfGenerator';
 
 // Modular Component imports
@@ -109,13 +110,72 @@ export default function App() {
   }, []);
 
   // --- Stateful persistent system ---
-  const [currentDate, setCurrentDate] = useState<string>('2026-06-12'); // Simulation date
+  const [theme, setTheme] = useState<'dark' | 'light' | 'system'>(() => {
+    return (localStorage.getItem('the_arc_theme') as 'dark' | 'light' | 'system') || 'dark';
+  });
+
+  useEffect(() => {
+    const root = document.documentElement;
+    const applyTheme = (t: 'dark' | 'light' | 'system') => {
+      let isDark = false;
+      if (t === 'dark') {
+        isDark = true;
+      } else if (t === 'light') {
+        isDark = false;
+      } else if (t === 'system') {
+        isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      }
+
+      if (isDark) {
+        root.classList.add('dark');
+        root.style.colorScheme = 'dark';
+      } else {
+        root.classList.remove('dark');
+        root.style.colorScheme = 'light';
+      }
+    };
+
+    applyTheme(theme);
+    localStorage.setItem('the_arc_theme', theme);
+
+    if (theme === 'system') {
+      const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+      const listener = (e: MediaQueryListEvent) => {
+        if (theme === 'system') {
+          if (e.matches) {
+            root.classList.add('dark');
+            root.style.colorScheme = 'dark';
+          } else {
+            root.classList.remove('dark');
+            root.style.colorScheme = 'light';
+          }
+        }
+      };
+      mediaQuery.addEventListener('change', listener);
+      return () => mediaQuery.removeEventListener('change', listener);
+    }
+  }, [theme]);
+
+  const [currentDate, setCurrentDate] = useState<string>(() => localStorage.getItem('the_arc_current_date') || getTodayDateString()); // Simulation date
   const [userProfile, setUserProfile] = useState<UserProfile>(EMPTY_USER_PROFILE);
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [timetables, setTimetables] = useState<Timetable[]>([]);
   const [academicCalendar, setAcademicCalendar] = useState<AcademicCalendarItem[]>([]);
   const [specialOverrides, setSpecialOverrides] = useState<SpecialDayOverride[]>([]);
   const [records, setRecords] = useState<AttendanceRecord[]>([]);
+  const [manualOverrides, setManualOverrides] = useState<Record<string, { conducted: number; attended: number; missed: number }>>(() => {
+    try {
+      const saved = localStorage.getItem('the_arc_manual_stats_overrides');
+      return saved ? JSON.parse(saved) : {};
+    } catch (e) {
+      return {};
+    }
+  });
+
+  const handleUpdateManualOverrides = (newOverrides: Record<string, { conducted: number; attended: number; missed: number }>) => {
+    setManualOverrides(newOverrides);
+    localStorage.setItem('the_arc_manual_stats_overrides', JSON.stringify(newOverrides));
+  };
 
   // Persistent user notification configurations
   const [showProfileEditDialog, setShowProfileEditDialog] = useState(false);
@@ -145,10 +205,87 @@ export default function App() {
 
   const [activeTab, setActiveTab] = useState<'daily' | 'attendance' | 'analytics' | 'calendar' | 'timetable' | 'settings'>('daily');
   const [showNotificationToast, setShowNotificationToast] = useState(false);
+  const [migrationFeedback, setMigrationFeedback] = useState<string | null>(null);
   const [showNotificationsDropdown, setShowNotificationsDropdown] = useState(false);
   const [showMobileMoreMenu, setShowMobileMoreMenu] = useState(false);
   const [showQuickSettingsDrawer, setShowQuickSettingsDrawer] = useState<boolean>(false);
   const [confirmResetLocalStorage, setConfirmResetLocalStorage] = useState<boolean>(false);
+
+  // PWA Service Worker auto-update states
+  const [swRegistration, setSwRegistration] = useState<ServiceWorkerRegistration | null>(null);
+  const [showUpdatePrompt, setShowUpdatePrompt] = useState<boolean>(false);
+
+  useEffect(() => {
+    if ('serviceWorker' in navigator) {
+      const handleSWRegister = async () => {
+        try {
+          const reg = await navigator.serviceWorker.register('/sw.js');
+          setSwRegistration(reg);
+
+          // Check if there is already a service worker waiting for activation
+          if (reg.waiting) {
+            setShowUpdatePrompt(true);
+          }
+
+          // Listen for a new service worker installing
+          reg.onupdatefound = () => {
+            const installingWorker = reg.installing;
+            if (!installingWorker) return;
+            installingWorker.onstatechange = () => {
+              if (installingWorker.state === 'installed') {
+                if (navigator.serviceWorker.controller) {
+                  // New content is available and ready to activate!
+                  setShowUpdatePrompt(true);
+                }
+              }
+            };
+          };
+        } catch (err) {
+          console.error('Service Worker registration failed:', err);
+        }
+      };
+
+      if (document.readyState === 'complete') {
+        handleSWRegister();
+      } else {
+        window.addEventListener('load', handleSWRegister);
+        return () => window.removeEventListener('load', handleSWRegister);
+      }
+    }
+  }, []);
+
+  // Listen for controller changes to reload immediately
+  useEffect(() => {
+    let refreshing = false;
+    const handleControllerChange = () => {
+      if (!refreshing) {
+        refreshing = true;
+        window.location.reload();
+      }
+    };
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.addEventListener('controllerchange', handleControllerChange);
+      return () => navigator.serviceWorker.removeEventListener('controllerchange', handleControllerChange);
+    }
+  }, []);
+
+  // Set up periodic SW updates checks (every 5 minutes)
+  useEffect(() => {
+    if (swRegistration) {
+      const interval = setInterval(() => {
+        swRegistration.update().catch(err => console.log("SW update check failed", err));
+      }, 5 * 60 * 1000);
+      return () => clearInterval(interval);
+    }
+  }, [swRegistration]);
+
+  const handleActivateUpdate = () => {
+    if (swRegistration && swRegistration.waiting) {
+      swRegistration.waiting.postMessage({ type: 'SKIP_WAITING' });
+    } else {
+      window.location.reload();
+    }
+  };
 
   // Premium mobile-first Splash and Login states
   const [showSplash, setShowSplash] = useState<boolean>(true);
@@ -356,6 +493,158 @@ export default function App() {
   useEffect(() => {
     // Read local histories
     try {
+      const SCHEMA_VERSION = '2.6';
+      const storedSchemaVersion = localStorage.getItem('the_arc_schema_version');
+      let migrated = false;
+
+      const hasAnyData = localStorage.getItem('the_arc_profile') || 
+                         localStorage.getItem('the_arc_subjects') || 
+                         localStorage.getItem('the_arc_records') || 
+                         localStorage.getItem('the_arc_timetables');
+
+      if (hasAnyData && storedSchemaVersion !== SCHEMA_VERSION) {
+        // Create pre-migration backup to preserve every existing record
+        const migrationBackup: Record<string, string> = {};
+        try {
+          for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (key && key.startsWith('the_arc_')) {
+              migrationBackup[key] = localStorage.getItem(key) || '';
+            }
+          }
+        } catch (e) {
+          console.warn("Could not create full pre-migration backup from localStorage:", e);
+        }
+
+        try {
+          // App updated successfully. Your data has been migrated.
+          
+          // 1. Profile Migration
+          const storedProfile = localStorage.getItem('the_arc_profile');
+          if (storedProfile) {
+            try {
+              const parsed = JSON.parse(storedProfile);
+              const migratedProfile = {
+                ...EMPTY_USER_PROFILE,
+                ...parsed,
+                minAttendance: parsed.minAttendance ?? 75,
+                degree: parsed.degree || 'B.Tech',
+                course: parsed.course || 'B.Tech'
+              };
+              localStorage.setItem('the_arc_profile', JSON.stringify(migratedProfile));
+              migrated = true;
+            } catch (err) {
+              console.error("Profile migration error:", err);
+            }
+          }
+
+          // 2. Subjects Migration
+          const storedSubjects = localStorage.getItem('the_arc_subjects');
+          if (storedSubjects) {
+            try {
+              const parsed = JSON.parse(storedSubjects);
+              if (Array.isArray(parsed)) {
+                const migratedSubjects = parsed.map((s: any) => ({
+                  ...s,
+                  isLab: s.isLab ?? false,
+                  minPercentage: s.minPercentage ?? 75
+                }));
+                localStorage.setItem('the_arc_subjects', JSON.stringify(migratedSubjects));
+                migrated = true;
+              }
+            } catch (err) {
+              console.error("Subjects migration error:", err);
+            }
+          }
+
+          // 3. Records Migration
+          const storedRecords = localStorage.getItem('the_arc_records');
+          if (storedRecords) {
+            try {
+              const parsed = JSON.parse(storedRecords);
+              if (Array.isArray(parsed)) {
+                const migratedRecords = parsed.map((record: any) => {
+                  if (!record.slotsDetails && record.scheduledHours > 0) {
+                    const slots: SlotDetail[] = [];
+                    let remainingAttended = record.attendedHours;
+                    let missedIdx = 0;
+                    const hoursPerSlot = 1;
+
+                    for (let i = 0; i < record.scheduledHours; i++) {
+                      const isAttended = remainingAttended > 0;
+                      if (isAttended) {
+                        remainingAttended--;
+                      }
+                      let subjectCode = 'GEN';
+                      if (!isAttended && record.missedClasses && record.missedClasses.length > missedIdx) {
+                        subjectCode = record.missedClasses[missedIdx];
+                        missedIdx++;
+                      }
+                      slots.push({
+                        id: `legacy-${record.date}-${i}-${Date.now()}`,
+                        subjectCode,
+                        hours: hoursPerSlot,
+                        status: 'Conducted',
+                        isAttended,
+                        isLab: false
+                      });
+                    }
+                    record.slotsDetails = slots;
+                  }
+                  return {
+                    ...record,
+                    isMarked: record.isMarked ?? true,
+                    slotsDetails: record.slotsDetails || []
+                  };
+                });
+                localStorage.setItem('the_arc_records', JSON.stringify(migratedRecords));
+                migrated = true;
+              }
+            } catch (err) {
+              console.error("Records migration error:", err);
+            }
+          }
+
+          // 4. Timetables Migration
+          const storedTimetables = localStorage.getItem('the_arc_timetables');
+          if (storedTimetables) {
+            try {
+              const parsed = JSON.parse(storedTimetables);
+              if (Array.isArray(parsed)) {
+                const migratedTimetables = parsed.map((t: any) => ({
+                  ...t,
+                  slots: t.slots || {}
+                }));
+                localStorage.setItem('the_arc_timetables', JSON.stringify(migratedTimetables));
+                migrated = true;
+              }
+            } catch (err) {
+              console.error("Timetable migration error:", err);
+            }
+          }
+
+          localStorage.setItem('the_arc_schema_version', SCHEMA_VERSION);
+          if (migrated) {
+            setMigrationFeedback('App updated successfully. Your data has been migrated.');
+            setTimeout(() => setMigrationFeedback(null), 5000);
+          }
+        } catch (migrationError: any) {
+          console.error("Critical database migration failed! Restoring from pre-migration backup...", migrationError);
+          // Restore the backup if migration fails
+          try {
+            Object.entries(migrationBackup).forEach(([key, val]) => {
+              localStorage.setItem(key, val);
+            });
+            setMigrationFeedback('Update migration failed. Rolled back safely to previous version.');
+            setTimeout(() => setMigrationFeedback(null), 7000);
+          } catch (restoreErr) {
+            console.error("Failsafe rollback restore failed:", restoreErr);
+          }
+        }
+      } else if (!hasAnyData) {
+        localStorage.setItem('the_arc_schema_version', SCHEMA_VERSION);
+      }
+
       const storedProfile = localStorage.getItem('the_arc_profile');
       if (storedProfile) {
         const parsed = JSON.parse(storedProfile);
@@ -466,7 +755,7 @@ export default function App() {
     }
   };
 
-  const handleExportData = () => {
+  const handleExportData = async () => {
     try {
       const currentProfileState = { ...userProfile };
       const currentSubjectsState = [...subjects];
@@ -517,18 +806,44 @@ export default function App() {
 
       // 3. Glue the binary marker text to the end of the standard PDF Blob
       const finalPdfBlob = new Blob([pdfBlob, binaryMarker], { type: 'application/pdf' });
-      const downloadUrl = URL.createObjectURL(finalPdfBlob);
-
-      const downloadAnchor = document.createElement('a');
-      downloadAnchor.setAttribute("href", downloadUrl);
-
       const fileDate = new Date().toISOString().split('T')[0];
       const cleanName = (exportObject.data.profile.name || "scholar").toLowerCase().replace(/\s+/g, '_');
-      downloadAnchor.setAttribute("download", `the_arc_semester_backup_${cleanName}_${fileDate}.pdf`);
-      document.body.appendChild(downloadAnchor);
-      downloadAnchor.click();
-      downloadAnchor.remove();
-      URL.revokeObjectURL(downloadUrl);
+      const filename = `the_arc_semester_backup_${cleanName}_${fileDate}.pdf`;
+
+      const file = new File([finalPdfBlob], filename, { type: 'application/pdf' });
+      if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({
+          files: [file],
+          title: filename,
+          text: 'The Arc - Semester Backup Ledger'
+        });
+      } else {
+        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+        if (isMobile) {
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            const base64Str = reader.result as string;
+            const a = document.createElement('a');
+            a.href = base64Str;
+            a.download = filename;
+            a.style.display = 'none';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+          };
+          reader.readAsDataURL(finalPdfBlob);
+        } else {
+          const downloadUrl = URL.createObjectURL(finalPdfBlob);
+          const a = document.createElement('a');
+          a.href = downloadUrl;
+          a.download = filename;
+          a.style.display = 'none';
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          setTimeout(() => URL.revokeObjectURL(downloadUrl), 100);
+        }
+      }
     } catch (err: any) {
       console.error("Failed to export unified PDF data backup", err);
       alert("Failed to export data: " + err.message);
@@ -954,10 +1269,10 @@ export default function App() {
   }
 
   return (
-    <div className="the-arc-body min-h-screen bg-[#0A0C10] text-[#E2E8F0] font-sans selection:bg-blue-500/30 flex flex-col md:flex-row print:bg-white print:text-black">
+    <div className="the-arc-body min-h-screen bg-[#F8FAFC] dark:bg-[#0A0C10] text-slate-800 dark:text-[#E2E8F0] font-sans selection:bg-blue-500/30 flex flex-col md:flex-row print:bg-white print:text-black">
       
       {/* Sidebar - Sleek Theme left navigation drawer (desktop-only) */}
-      <aside className="hidden md:flex md:w-64 shrink-0 flex-col border-b md:border-b-0 md:border-r border-white/5 bg-[#0D1117] px-6 py-8 print:hidden">
+      <aside className="hidden md:flex md:w-64 shrink-0 flex-col border-b md:border-b-0 md:border-r border-slate-200 dark:border-white/5 bg-white dark:bg-[#0D1117] px-6 py-8 print:hidden">
         <div className="flex items-center gap-3 mb-10 shrink-0">
           <img 
             src="/favicon.svg" 
@@ -965,7 +1280,7 @@ export default function App() {
             className="w-10 h-10 object-contain rounded-xl shadow-md shadow-blue-500/10 shrink-0" 
           />
           <div className="min-w-0">
-            <h1 className="text-base font-black tracking-tight text-white uppercase whitespace-nowrap leading-none">THE ARC</h1>
+            <h1 className="text-base font-black tracking-tight text-slate-900 dark:text-white uppercase whitespace-nowrap leading-none">THE ARC</h1>
           </div>
         </div>
         
@@ -976,8 +1291,8 @@ export default function App() {
             onClick={() => setActiveTab('daily')}
             className={`flex items-center justify-between gap-2 px-3 py-2 text-xs font-semibold rounded-lg transition-all cursor-pointer whitespace-nowrap ${
               activeTab === 'daily'
-                ? 'bg-blue-600/15 text-blue-400 border border-blue-500/20 shadow-xs'
-                : 'text-slate-400 hover:bg-white/5 hover:text-slate-200 border border-transparent'
+                ? 'bg-blue-50 dark:bg-blue-600/15 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-500/20 shadow-xs'
+                : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-white/5 hover:text-slate-900 dark:hover:text-slate-200 border border-transparent'
             }`}
           >
             <div className="flex items-center gap-2">
@@ -996,8 +1311,8 @@ export default function App() {
             onClick={() => setActiveTab('attendance')}
             className={`flex items-center gap-2 px-3 py-2 text-xs font-semibold rounded-lg transition-all cursor-pointer whitespace-nowrap ${
               activeTab === 'attendance'
-                ? 'bg-blue-600/15 text-blue-400 border border-blue-500/20 shadow-xs'
-                : 'text-slate-400 hover:bg-white/5 hover:text-slate-200 border border-transparent'
+                ? 'bg-blue-50 dark:bg-blue-600/15 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-500/20 shadow-xs'
+                : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-white/5 hover:text-slate-900 dark:hover:text-slate-200 border border-transparent'
             }`}
           >
             <span className={`w-1.5 h-1.5 rounded-full ${activeTab === 'attendance' ? 'bg-blue-500' : 'bg-transparent'}`} />
@@ -1009,8 +1324,8 @@ export default function App() {
             onClick={() => setActiveTab('analytics')}
             className={`flex items-center gap-2 px-3 py-2 text-xs font-semibold rounded-lg transition-all cursor-pointer whitespace-nowrap ${
               activeTab === 'analytics'
-                ? 'bg-blue-600/15 text-blue-400 border border-blue-500/20 shadow-xs'
-                : 'text-slate-400 hover:bg-white/5 hover:text-slate-200 border border-transparent'
+                ? 'bg-blue-50 dark:bg-blue-600/15 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-500/20 shadow-xs'
+                : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-white/5 hover:text-slate-900 dark:hover:text-slate-200 border border-transparent'
             }`}
           >
             <span className={`w-1.5 h-1.5 rounded-full ${activeTab === 'analytics' ? 'bg-blue-500' : 'bg-transparent'}`} />
@@ -1022,8 +1337,8 @@ export default function App() {
             onClick={() => setActiveTab('calendar')}
             className={`flex items-center gap-2 px-3 py-2 text-xs font-semibold rounded-lg transition-all cursor-pointer whitespace-nowrap ${
               activeTab === 'calendar'
-                ? 'bg-blue-600/15 text-blue-400 border border-blue-500/20 shadow-xs'
-                : 'text-slate-400 hover:bg-white/5 hover:text-slate-200 border border-transparent'
+                ? 'bg-blue-50 dark:bg-blue-600/15 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-500/20 shadow-xs'
+                : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-white/5 hover:text-slate-900 dark:hover:text-slate-200 border border-transparent'
             }`}
           >
             <span className={`w-1.5 h-1.5 rounded-full ${activeTab === 'calendar' ? 'bg-blue-500' : 'bg-transparent'}`} />
@@ -1035,8 +1350,8 @@ export default function App() {
             onClick={() => setActiveTab('timetable')}
             className={`flex items-center gap-2 px-3 py-2 text-xs font-semibold rounded-lg transition-all cursor-pointer whitespace-nowrap ${
               activeTab === 'timetable'
-                ? 'bg-blue-600/15 text-blue-400 border border-blue-500/20 shadow-xs'
-                : 'text-slate-400 hover:bg-white/5 hover:text-slate-200 border border-transparent'
+                ? 'bg-blue-50 dark:bg-blue-600/15 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-500/20 shadow-xs'
+                : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-white/5 hover:text-slate-900 dark:hover:text-slate-200 border border-transparent'
             }`}
           >
             <span className={`w-1.5 h-1.5 rounded-full ${activeTab === 'timetable' ? 'bg-blue-500' : 'bg-transparent'}`} />
@@ -1049,34 +1364,34 @@ export default function App() {
         </nav>
 
         {/* Local Device Encryption & Security - Sidebar Bottom */}
-        <div className="hidden md:block mt-auto p-4 rounded-xl bg-slate-900/40 border border-white/5 space-y-3">
+        <div className="hidden md:block mt-auto p-4 rounded-xl bg-slate-50 dark:bg-slate-900/40 border border-slate-200 dark:border-white/5 space-y-3">
           <div className="space-y-3">
             <div className="flex items-center gap-2.5">
               <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-blue-600/20 to-cyan-500/20 border border-blue-500/30 flex items-center justify-center shrink-0">
                 <span className="text-[10px] font-black text-blue-400">ARC</span>
               </div>
               <div className="min-w-0 flex-1">
-                <h4 className="text-xs font-bold text-white truncate leading-none">{userProfile.name || "Offline Scholar"}</h4>
+                <h4 className="text-xs font-bold text-slate-800 dark:text-white truncate leading-none">{userProfile.name || "Offline Scholar"}</h4>
                 <p className="text-[9px] text-[#64748B] font-mono truncate mt-1 leading-none">{userProfile.email || "offline@phone.local"}</p>
               </div>
             </div>
             
-            <div className="pt-2.5 border-t border-white/5 space-y-1.5 font-sans">
+            <div className="pt-2.5 border-t border-slate-200 dark:border-white/5 space-y-1.5 font-sans">
               <div className="flex justify-between items-center text-[10px]">
                 <span className="text-[#64748B] font-semibold">Security Vault:</span>
-                <span className="font-mono font-bold text-[9px] uppercase tracking-wider text-emerald-400">
+                <span className="font-mono font-bold text-[9px] uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
                   Local Storage
                 </span>
               </div>
               <div className="flex justify-between items-center text-[10px]">
                 <span className="text-[#64748B] font-semibold">Network State:</span>
-                <span className={`font-mono font-bold text-[9px] uppercase tracking-wider ${isOnline ? 'text-emerald-400' : 'text-amber-400'}`}>
+                <span className={`font-mono font-bold text-[9px] uppercase tracking-wider ${isOnline ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}`}>
                   {isOnline ? 'Online (Synced)' : 'Offline (Cached)'}
                 </span>
               </div>
               <button
                 onClick={handleLogout}
-                className="w-full mt-2 h-7 rounded bg-red-500/10 hover:bg-red-500/25 text-red-400 hover:text-red-300 font-bold text-[10px] transition-all cursor-pointer text-center flex items-center justify-center font-sans"
+                className="w-full mt-2 h-7 rounded bg-red-500/10 hover:bg-red-500/25 text-red-600 dark:text-red-400 hover:text-red-500 font-bold text-[10px] transition-all cursor-pointer text-center flex items-center justify-center font-sans"
               >
                 Sign Out / New Profile
               </button>
@@ -1089,15 +1404,15 @@ export default function App() {
       <div className="flex-1 flex flex-col min-w-0">
         
         {/* Mobile Top Header Cockpit (hidden on desktop screens) */}
-        <header className="md:hidden border-b border-white/10 bg-[#0D1117]/90 backdrop-blur-md px-4 py-3 flex items-center justify-between sticky top-0 z-40 select-none">
+        <header className="md:hidden border-b border-slate-200 dark:border-white/10 bg-white/95 dark:bg-[#0D1117]/90 backdrop-blur-md px-4 py-3 flex items-center justify-between sticky top-0 z-40 select-none">
           <div className="flex items-center gap-2.5 min-w-0 mr-2 flex-1">
             <img 
               src="/favicon.svg" 
               alt="The Arc Logo" 
               className="w-8.5 h-8.5 object-contain rounded-lg shadow-md shadow-blue-900/10 shrink-0" 
-            />
+          />
             <div className="min-w-0">
-              <h1 className="text-xs font-black tracking-tight text-white uppercase leading-none whitespace-nowrap flex items-center gap-1.5">
+              <h1 className="text-xs font-black tracking-tight text-slate-900 dark:text-white uppercase leading-none whitespace-nowrap flex items-center gap-1.5">
                 <span>THE ARC</span>
                 <span className={`w-1.5 h-1.5 rounded-full ${isOnline ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`} title={isOnline ? "Online (Database connected)" : "Offline Mode (Local Storage active)"} />
               </h1>
@@ -1106,9 +1421,9 @@ export default function App() {
 
           <div className="flex items-center gap-2">
             {/* Quick date picker */}
-            <div className="relative flex items-center space-x-1 bg-white/5 border border-white/10 rounded-lg px-2 py-1.5 text-[10px] min-w-[130px] overflow-hidden">
+            <div className="relative flex items-center space-x-1 bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-lg px-2 py-1.5 text-[10px] min-w-[130px] overflow-hidden">
               <span className="text-slate-500 font-mono">Date:</span>
-              <span className="font-mono text-[10px] font-bold text-white shrink-0">
+              <span className="font-mono text-[10px] font-bold text-slate-800 dark:text-white shrink-0">
                 {formatDateToDDMMYYYY(currentDate)}
               </span>
               <span className="text-[#64748B] text-[8px] pl-1 pointer-events-none select-none">▼</span>
@@ -1363,6 +1678,54 @@ export default function App() {
           </div>
         )}
 
+        {/* Migration Feedback banner */}
+        {migrationFeedback && (
+          <div
+            id="notification-migration-toast"
+            className="bg-emerald-950/90 border-b border-emerald-500/25 px-4 py-2.5 text-xs font-semibold text-emerald-300 flex items-center justify-between transition-colors print:hidden animate-in fade-in slide-in-from-top-2 duration-300"
+          >
+            <div className="flex items-center space-x-2">
+              <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+              <span>{migrationFeedback}</span>
+            </div>
+            <button
+              onClick={() => setMigrationFeedback(null)}
+              className="text-emerald-400 hover:text-emerald-200 transition-colors shrink-0 cursor-pointer"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        )}
+
+        {/* PWA Update Banner */}
+        {showUpdatePrompt && (
+          <div
+            id="pwa-update-banner"
+            className="bg-blue-600 border-b border-blue-500 px-4 py-2.5 text-xs font-semibold text-white flex items-center justify-between transition-all duration-300 print:hidden animate-fade-in"
+          >
+            <div className="flex items-center space-x-2">
+              <Sparkles className="h-4 w-4 shrink-0 animate-pulse text-amber-300" />
+              <span>A robust new update for THE ARC is available! Tap to instantly activate.</span>
+            </div>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setShowUpdatePrompt(false)}
+                className="text-white/80 hover:text-white transition-colors text-[10px] font-mono"
+              >
+                Dismiss
+              </button>
+              <button
+                type="button"
+                onClick={handleActivateUpdate}
+                className="bg-white text-blue-600 hover:bg-slate-100 transition-all font-bold px-3 py-1 rounded-md shadow-sm text-[10px] cursor-pointer"
+              >
+                Update Now
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Workspace core panels */}
         <div className="flex-1 p-2.5 sm:p-4 md:p-8 overflow-y-auto space-y-4 sm:space-y-6">
           
@@ -1374,7 +1737,7 @@ export default function App() {
                 <p className="text-xs text-slate-500">Student Profile: {userProfile.name} ({userProfile.course}) / Roll: {userProfile.rollNo}</p>
               </div>
               <div className="text-right font-mono text-xs">
-                <p>Generated Date: {new Date().toLocaleDateString()}</p>
+                <p>Generated Date: {formatDateObjToDDMMYYYY(new Date())}</p>
                 <p>Rule Engine Architecture: V1.0</p>
               </div>
             </div>
@@ -1428,7 +1791,7 @@ export default function App() {
                         <tr className="border-t border-white/5 hover:bg-white/5 transition-colors">
                           <td className="text-[7px] xs:text-[7.5px] sm:text-[8px] font-mono font-bold text-slate-500 py-[1px] sm:py-[1.5px] w-[52px] xs:w-[58px] sm:w-[70px] text-left uppercase tracking-wider select-none shrink-0 whitespace-nowrap">SEMESTER</td>
                           <td className="py-[1px] sm:py-[1.5px] px-0.5 text-slate-600 font-extrabold w-1.5 text-center select-none">:</td>
-                          <td className="py-[1px] sm:py-[1.5px] pl-1 text-blue-400 font-bold text-left text-[8px] xs:text-[8.5px] sm:text-[9px] uppercase truncate max-w-[90px] xs:max-w-[120px] sm:max-w-none">{userProfile.semester || 'Semester V'}</td>
+                          <td className="py-[1px] sm:py-[1.5px] pl-1 text-blue-400 font-bold text-left text-[8px] xs:text-[8.5px] sm:text-[9px] uppercase truncate max-w-[90px] xs:max-w-[120px] sm:max-w-none">{userProfile.semester || 'VI Semester'}</td>
                         </tr>
                         <tr className="border-t border-white/5 hover:bg-white/5 transition-colors">
                           <td className="text-[7px] xs:text-[7.5px] sm:text-[8px] font-mono font-bold text-slate-500 py-[1px] sm:py-[1.5px] w-[52px] xs:w-[58px] sm:w-[70px] text-left uppercase tracking-wider select-none shrink-0 whitespace-nowrap">COLLEGE</td>
@@ -1528,6 +1891,8 @@ export default function App() {
                   specialOverrides={specialOverrides}
                   onSave={handleSaveAttendanceRecord}
                   onDelete={handleDeleteAttendanceRecord}
+                  onDateChange={setCurrentDate}
+                  userProfile={userProfile}
                 />
               </div>
             )}
@@ -1540,6 +1905,8 @@ export default function App() {
                 timetables={timetables}
                 currentDate={currentDate}
                 userProfile={userProfile}
+                manualOverrides={manualOverrides}
+                onUpdateManualOverrides={handleUpdateManualOverrides}
               />
             )}
 
@@ -1555,6 +1922,7 @@ export default function App() {
                 academicCalendar={academicCalendar}
                 specialOverrides={specialOverrides}
                 userProfile={userProfile}
+                manualOverrides={manualOverrides}
               />
             )}
 
@@ -1574,6 +1942,7 @@ export default function App() {
                 onDeleteOverride={handleDeleteOverride}
                 onTriggerShare={handleTriggerShareDate}
                 onTriggerExport={handleTriggerExportDate}
+                userProfile={userProfile}
               />
             )}
 
@@ -1588,6 +1957,7 @@ export default function App() {
                 onReplaceTimetable={handleReplaceTimetable}
                 currentDate={currentDate}
                 onImportTimetableAndProfile={handleImportTimetableAndProfile}
+                userProfile={userProfile}
               />
             )}
 
@@ -2113,6 +2483,11 @@ export default function App() {
                   onImportData={handleImportData}
                   importingError={importingError}
                   importingSuccess={importingSuccess}
+                  theme={theme}
+                  onUpdateTheme={setTheme}
+                  subjects={subjects}
+                  records={records}
+                  timetables={timetables}
                 />
 
                 {/* Status Info Card */}
@@ -2242,6 +2617,7 @@ export default function App() {
                       setSubjects([]);
                       setTimetables([]);
                       setSpecialOverrides([]);
+                      setManualOverrides({});
                       
                       // 3. Close dialog
                       setConfirmResetLocalStorage(false);

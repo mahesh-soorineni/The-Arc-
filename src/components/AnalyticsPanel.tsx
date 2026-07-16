@@ -46,6 +46,7 @@ interface AnalyticsPanelProps {
   academicCalendar: AcademicCalendarItem[];
   specialOverrides: SpecialDayOverride[];
   userProfile: UserProfile;
+  manualOverrides?: Record<string, { conducted: number; attended: number; missed: number }>;
 }
 
 export default function AnalyticsPanel({
@@ -57,11 +58,12 @@ export default function AnalyticsPanel({
   currentDate,
   academicCalendar,
   specialOverrides,
-  userProfile
+  userProfile,
+  manualOverrides = {}
 }: AnalyticsPanelProps) {
   // Filter out simulated future days
   const activeRecords = records.filter(r => r.date <= currentDate);
-  const analytics = calculateAnalytics(activeRecords, subjects, timetables, minAttendanceSetting);
+  const analytics = calculateAnalytics(activeRecords, subjects, timetables, minAttendanceSetting, manualOverrides);
   const totalAttended = analytics.totalPresentHours;
   const totalScheduled = analytics.totalScheduledHours;
 
@@ -141,7 +143,7 @@ export default function AnalyticsPanel({
         <div id="card-overall-pct" className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm flex items-center justify-between">
           <div className="space-y-2">
             <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider font-mono">
-              Overall Attendance
+              Overall Attendance ({userProfile.semester || 'Current Semester'})
             </h4>
             <div className="flex items-baseline space-x-1">
               <span className="text-4xl font-extrabold font-mono text-slate-900 tracking-tight">
@@ -304,7 +306,7 @@ export default function AnalyticsPanel({
           <div className="flex items-center space-x-2">
             <TrendingUp className="h-5 w-5 text-blue-500" />
             <div>
-              <h3 className="font-sans font-bold text-base text-slate-900 tracking-tight">Attendance Forecasting</h3>
+              <h3 className="font-sans font-bold text-base text-slate-900 tracking-tight">Attendance Forecasting ({userProfile.semester || 'Current Semester'})</h3>
               <p className="text-xs text-slate-500">Project different future lookahead scenarios to protect your grades.</p>
             </div>
           </div>
