@@ -1417,7 +1417,7 @@ export default function App() {
       <div className="flex-1 flex flex-col min-w-0">
         
         {/* Mobile Top Header Cockpit (hidden on desktop screens) */}
-        <header className="md:hidden border-b border-slate-200 dark:border-white/10 bg-white/95 dark:bg-[#0D1117]/90 backdrop-blur-md px-4 py-3 flex items-center justify-between sticky top-0 z-40 select-none">
+        <header className="md:hidden border-b border-slate-200 dark:border-white/10 bg-white/95 dark:bg-[#0D1117]/90 backdrop-blur-md px-4 pb-3 pt-3 pwa-safe-top flex items-center justify-between sticky top-0 z-40 select-none">
           <div className="flex items-center gap-2.5 min-w-0 mr-2 flex-1">
             <img 
               src="/favicon.svg" 
@@ -2331,7 +2331,7 @@ export default function App() {
         )}
 
         {/* High Fidelity Mobile Sticky Bottom Tab Bar (hidden on desktop screens) */}
-        <div className="md:hidden sticky bottom-0 z-50 bg-[#0D1117]/95 backdrop-blur-md border-t border-white/10 flex items-center justify-around py-2.5 px-1 select-none print:hidden shrink-0 shadow-lg shadow-black/80">
+        <div className="md:hidden sticky bottom-0 z-50 bg-[#0D1117]/95 backdrop-blur-md border-t border-white/10 flex items-center justify-around pt-2.5 pb-2.5 pwa-safe-bottom px-1 select-none print:hidden shrink-0 shadow-lg shadow-black/80">
           <button
             id="mobile-nav-btn-daily"
             onClick={() => {

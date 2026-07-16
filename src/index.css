@@ -257,3 +257,12 @@ html.dark .the-arc-body tr:hover {
 html.dark .the-arc-body .divide-slate-200 > * {
   border-color: rgba(255, 255, 255, 0.05) !important;
 }
+
+/* PWA Standalone Mode & Safe Area Support */
+.pwa-safe-top {
+  padding-top: calc(12px + env(safe-area-inset-top, 0px)) !important;
+}
+
+.pwa-safe-bottom {
+  padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px)) !important;
+}
