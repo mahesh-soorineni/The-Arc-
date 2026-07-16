@@ -691,54 +691,6 @@ export default function SettingsTab({
 
             <div className="space-y-4">
               
-              {/* Theme Preferences */}
-              <div className="space-y-3 bg-black/10 dark:bg-black/20 p-4 rounded-xl border border-slate-200 dark:border-white/5">
-                <div className="space-y-0.5">
-                  <h4 className="text-xs font-bold text-slate-800 dark:text-white">Theme Selection</h4>
-                  <p className="text-[10px] text-slate-500 dark:text-slate-400">
-                    Switch between light, dark, or system default interfaces instantly.
-                  </p>
-                </div>
-                <div className="grid grid-cols-3 gap-2 pt-1.5">
-                  <button
-                    type="button"
-                    onClick={() => onUpdateTheme('dark')}
-                    className={`px-3 py-2.5 rounded-xl text-xs font-bold border transition-all flex flex-col items-center justify-center gap-1 cursor-pointer ${
-                      theme === 'dark'
-                        ? 'bg-blue-600 border-blue-500 text-white shadow-md shadow-blue-500/20'
-                        : 'bg-white dark:bg-[#0A0D14]/85 text-slate-700 dark:text-slate-400 border-slate-200 dark:border-white/5 hover:bg-slate-50 dark:hover:bg-[#0A0D14]/90 hover:text-slate-900 dark:hover:text-white'
-                    }`}
-                  >
-                    <span className="text-sm">🌙</span>
-                    <span>Dark Mode</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => onUpdateTheme('light')}
-                    className={`px-3 py-2.5 rounded-xl text-xs font-bold border transition-all flex flex-col items-center justify-center gap-1 cursor-pointer ${
-                      theme === 'light'
-                        ? 'bg-blue-600 border-blue-500 text-white shadow-md shadow-blue-500/20'
-                        : 'bg-white dark:bg-[#0A0D14]/85 text-slate-700 dark:text-slate-400 border-slate-200 dark:border-white/5 hover:bg-slate-50 dark:hover:bg-[#0A0D14]/90 hover:text-slate-900 dark:hover:text-white'
-                    }`}
-                  >
-                    <span className="text-sm">☀️</span>
-                    <span>Light Mode</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => onUpdateTheme('system')}
-                    className={`px-3 py-2.5 rounded-xl text-xs font-bold border transition-all flex flex-col items-center justify-center gap-1 cursor-pointer ${
-                      theme === 'system'
-                        ? 'bg-blue-600 border-blue-500 text-white shadow-md shadow-blue-500/20'
-                        : 'bg-white dark:bg-[#0A0D14]/85 text-slate-700 dark:text-slate-400 border-slate-200 dark:border-white/5 hover:bg-slate-50 dark:hover:bg-[#0A0D14]/90 hover:text-slate-900 dark:hover:text-white'
-                    }`}
-                  >
-                    <span className="text-sm">⚙️</span>
-                    <span>System</span>
-                  </button>
-                </div>
-              </div>
-
               {/* Simulator Date Control */}
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5 bg-black/20 p-3 rounded-xl border border-white/5">
                 <div className="space-y-0.5">

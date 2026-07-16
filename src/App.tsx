@@ -110,51 +110,14 @@ export default function App() {
   }, []);
 
   // --- Stateful persistent system ---
-  const [theme, setTheme] = useState<'dark' | 'light' | 'system'>(() => {
-    return (localStorage.getItem('the_arc_theme') as 'dark' | 'light' | 'system') || 'dark';
-  });
+  const [theme, setTheme] = useState<'dark' | 'light' | 'system'>('dark');
 
   useEffect(() => {
     const root = document.documentElement;
-    const applyTheme = (t: 'dark' | 'light' | 'system') => {
-      let isDark = false;
-      if (t === 'dark') {
-        isDark = true;
-      } else if (t === 'light') {
-        isDark = false;
-      } else if (t === 'system') {
-        isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-      }
-
-      if (isDark) {
-        root.classList.add('dark');
-        root.style.colorScheme = 'dark';
-      } else {
-        root.classList.remove('dark');
-        root.style.colorScheme = 'light';
-      }
-    };
-
-    applyTheme(theme);
-    localStorage.setItem('the_arc_theme', theme);
-
-    if (theme === 'system') {
-      const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
-      const listener = (e: MediaQueryListEvent) => {
-        if (theme === 'system') {
-          if (e.matches) {
-            root.classList.add('dark');
-            root.style.colorScheme = 'dark';
-          } else {
-            root.classList.remove('dark');
-            root.style.colorScheme = 'light';
-          }
-        }
-      };
-      mediaQuery.addEventListener('change', listener);
-      return () => mediaQuery.removeEventListener('change', listener);
-    }
-  }, [theme]);
+    root.classList.add('dark');
+    root.style.colorScheme = 'dark';
+    localStorage.setItem('the_arc_theme', 'dark');
+  }, []);
 
   const [currentDate, setCurrentDate] = useState<string>(() => localStorage.getItem('the_arc_current_date') || getTodayDateString()); // Simulation date
   const [userProfile, setUserProfile] = useState<UserProfile>(EMPTY_USER_PROFILE);
