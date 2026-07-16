@@ -1380,7 +1380,7 @@ export default function App() {
       <div className="flex-1 flex flex-col min-w-0">
         
         {/* Mobile Top Header Cockpit (hidden on desktop screens) */}
-        <header className="md:hidden border-b border-slate-200 dark:border-white/10 bg-white/95 dark:bg-[#0D1117]/90 backdrop-blur-md px-4 pb-3 pt-3 pwa-safe-top flex items-center justify-between sticky top-0 z-40 select-none">
+        <header className="md:hidden border-b border-white/5 bg-[#090911]/95 backdrop-blur-md px-4 pb-3 pt-3 pwa-safe-top flex items-center justify-between sticky top-0 z-40 select-none">
           <div className="flex items-center gap-2.5 min-w-0 mr-2 flex-1">
             <img 
               src="/favicon.svg" 
@@ -1388,7 +1388,7 @@ export default function App() {
               className="w-8.5 h-8.5 object-contain rounded-lg shadow-md shadow-blue-900/10 shrink-0" 
           />
             <div className="min-w-0">
-              <h1 className="text-xs font-black tracking-tight text-slate-900 dark:text-white uppercase leading-none whitespace-nowrap flex items-center gap-1.5">
+              <h1 className="text-xs font-black tracking-tight text-white uppercase leading-none whitespace-nowrap flex items-center gap-1.5">
                 <span>THE ARC</span>
                 <span className={`w-1.5 h-1.5 rounded-full ${isOnline ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`} title={isOnline ? "Online (Database connected)" : "Offline Mode (Local Storage active)"} />
               </h1>
@@ -1397,9 +1397,9 @@ export default function App() {
 
           <div className="flex items-center gap-2">
             {/* Quick date picker */}
-            <div className="relative flex items-center space-x-1 bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-lg px-2 py-1.5 text-[10px] min-w-[130px] overflow-hidden">
+            <div className="relative flex items-center space-x-1 bg-white/5 border border-white/10 rounded-lg px-2 py-1.5 text-[10px] min-w-[130px] overflow-hidden">
               <span className="text-slate-500 font-mono">Date:</span>
-              <span className="font-mono text-[10px] font-bold text-slate-800 dark:text-white shrink-0">
+              <span className="font-mono text-[10px] font-bold text-white shrink-0">
                 {formatDateToDDMMYYYY(currentDate)}
               </span>
               <span className="text-[#64748B] text-[8px] pl-1 pointer-events-none select-none">▼</span>

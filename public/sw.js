@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-const CACHE_NAME = 'the-arc-v1';
+const CACHE_NAME = 'the-arc-v2';
 const ASSETS = [
   '/',
   '/index.html',
